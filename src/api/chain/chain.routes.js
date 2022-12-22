@@ -7,7 +7,8 @@ const upload = multer({ storage: storage });
 
 const router = express.Router();
 
-router.post("/upload", upload.single("file"), controller.upload);
+router.post("/upload", upload.single("file"), controller.uploadAsset);
+router.post("/transfer", upload.fields(), controller.transferAsset);
 router.post("/download", upload.single("file"), controller.downloadAsset);
 router.post("/searchAssetById", upload.fields(), controller.searchAssetById);
 router.post(

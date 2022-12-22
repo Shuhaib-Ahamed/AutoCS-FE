@@ -1,7 +1,7 @@
 import BigchainDB from "bigchaindb-driver";
 import encryptor from "../utils/encryption.js";
 const API_PATH = process.env.BIG_CHAIN_NET;
-const conn = new BigchainDB.Connection(API_PATH);
+const chainConnection = new BigchainDB.Connection(API_PATH);
 
 let BigChainDbI = {
   createSimpleAsset: async (keypair, asset, metadata) => {
@@ -27,7 +27,7 @@ let BigChainDbI = {
     let result = { isErr: false, res: assetObj };
 
     try {
-      assetObj = await conn.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
+      assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
     } catch (err) {
       result.isErr = true;
       return result;
@@ -35,15 +35,6 @@ let BigChainDbI = {
     result.isErr = false;
     result.res = assetObj;
     return result;
-
-    /*
-        .then(() => conn.pollStatusAndFetchTransaction(txCreateAliceSimpleSigned.id))
-        .then(retrievedTx => console.log('Transaction', retrievedTx.id, 'successfully posted.'))
-        .then(() => conn.getStatus(txCreateAliceSimpleSigned.id))
-        .then(status => console.log('Retrieved status method 2: ', status))
-        .then(() => conn.searchAssets(txCreateAliceSimpleSigned.id))
-        .then(assets => console.log('Found assets creaed by Dian Balta: ', assets))
-        */
   },
 
   downloadAsset: async (assetId, encryptionKey) => {
@@ -54,7 +45,6 @@ let BigChainDbI = {
       const encModel = foundAsset.res.asset.data.model.encrypted_model;
       decryptedFile = encryptor.fileDecrypt(encModel, encryptionKey);
     }
-
     return decryptedFile;
   },
 
@@ -63,7 +53,7 @@ let BigChainDbI = {
     let result = { isErr: false, res: assetObj };
 
     try {
-      assetObj = await conn.getTransaction(assetId); //or USE: searchAssets OR pollStatusAndFetchTransaction
+      assetObj = await chainConnection.getTransaction(assetId); //or USE: searchAssets OR pollStatusAndFetchTransaction
     } catch (err) {
       result.isErr = true;
       return result;
@@ -79,7 +69,7 @@ let BigChainDbI = {
     let result = { isErr: false, res: assetObj };
 
     try {
-      assetObj = await conn.searchMetadata(metadataKeyword);
+      assetObj = await chainConnection.searchMetadata(metadataKeyword);
     } catch (err) {
       result.isErr = true;
       return result;
@@ -88,6 +78,49 @@ let BigChainDbI = {
     result.isErr = false;
     result.res = assetObj;
     return result;
+  },
+
+  transferAsset: async (assetId, senderKeypair, metaData, issureKeyPair) => {
+    let assetObj = null;
+    let result = { isErr: false, res: assetObj };
+
+    //Fetch the Asset by assetId or transactionId
+    let fetchAsset = await BigChainDbI.searchAssetById(assetId);
+
+    if (fetchAsset.res && !fetchAsset.isErr) {
+      //Transfer the Asset
+
+      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
+        // signedTx to transfer and output index
+        [{ tx: fetchAsset.res, output_index: 0 }],
+
+        [
+          BigchainDB.Transaction.makeOutput(
+            BigchainDB.Transaction.makeEd25519Condition(senderKeypair.publicKey)
+          ),
+        ],
+
+        // metadata
+        metaData
+      );
+
+      // Sign the transaction with private keys
+      const txSigned = BigchainDB.Transaction.signTransaction(
+        txTransfer,
+        issureKeyPair.privateKey
+      );
+
+      try {
+        assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
+      } catch (err) {
+        result.isErr = true;
+        return result;
+      }
+
+      result.isErr = false;
+      result.res = assetObj;
+      return result;
+    }
   },
 };
 

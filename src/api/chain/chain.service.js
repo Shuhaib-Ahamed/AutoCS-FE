@@ -32,17 +32,21 @@ export default {
       metadata[key] = formData[key];
     }
 
+    let { encryptionKey, ...excludedMetaData } = { ...metadata };
+
+    const assetKeyPair = bdbUser;
+
     let result = await BigChainDbI.createSimpleAsset(
-      bdbUser,
+      assetKeyPair,
       assetdata,
-      metadata
+      excludedMetaData
     );
 
     if (result.isErr) {
       return { message: "Error when uploading asset!" };
     }
 
-    const response = result.res;
+    const response = { ...assetKeyPair, ...result.res };
 
     return { message: "Upload successfull", response };
   },
@@ -59,7 +63,7 @@ export default {
       return { message: `"error when getting asset with id= " + ${assetId}` };
     }
 
-    const response = result.res;
+    const response = result;
 
     return { message: "Decrypted Asset", response };
   },
@@ -99,5 +103,29 @@ export default {
     const response = result.res;
 
     return { message: "Fetched Asset", response };
+  },
+
+  transferAsset: async (req, res) => {
+    const formData = req;
+
+    let { txId, issuerKeyPair, ...metaData } = { ...formData };
+
+    const senderKeyPair = bdbUser;
+
+    // txId, keypairTo, metaData, keypairFrom
+    let result = await BigChainDbI.transferAsset(
+      formData.assetId,
+      senderKeyPair,
+      metaData,
+      formData.issuerKeyPair
+    );
+
+    if (result.isErr) {
+      return { message: "Error when transfering asset!" };
+    }
+
+    const response = { ...senderKeyPair, ...result.res };
+
+    return { message: "Transfer successfull!!", response };
   },
 };

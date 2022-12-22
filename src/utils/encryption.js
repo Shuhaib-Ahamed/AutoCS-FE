@@ -10,7 +10,7 @@ export default {
     return crypto.createHmac("sha256", salt).update(pwd).digest("hex");
   },
   fileEncrypt: (file, encryptionKey) => {
-    // Encrypt
+    // Encrypt 
     var ciphertext = CryptoJS.AES.encrypt(file, encryptionKey);
     return ciphertext;
   },
@@ -18,7 +18,6 @@ export default {
     // Decrypt
     var bytes = CryptoJS.AES.decrypt(encModel.toString(), encryptionKey);
     var decryptedData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-    console.log("decrypted data: ", decryptedData);
     return decryptedData;
   },
 };

@@ -2,11 +2,21 @@ import { success } from "../../utils/responseApi.js";
 import chainService from "./chain.service.js";
 
 export default {
-  upload: async (req, res, next) => {
+  uploadAsset: async (req, res, next) => {
     try {
       const result = await chainService.upload(req);
       success(res, 200, result);
     } catch (error) {
+      return next(error);
+    }
+  },
+
+  transferAsset: async (req, res, next) => {
+    try {
+      const result = await chainService.transferAsset(req.body);
+      success(res, 200, result);
+    } catch (error) {
+      console.log(error);
       return next(error);
     }
   },
