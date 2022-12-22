@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 export default {
@@ -8,13 +8,14 @@ export default {
     database: process.env.DB_DATABASE,
     host: process.env.DB_HOST,
     dialect: process.env.DB_DIALECT,
-    logging: false
+    logging: false,
+    stelar: "https://horizon-testnet.stellar.org",
   },
   staging: {
     use_env_variable: true,
     url: process.env.JAWSDB_URL,
     dialect: process.env.DB_DIALECT,
-    logging: false
+    logging: false,
   },
   production: {
     username: process.env.DB_USERNAME,
@@ -22,6 +23,6 @@ export default {
     database: process.env.DB_DATABASE,
     host: process.env.DB_HOST,
     dialect: process.env.DB_DIALECT,
-    logging: false
-  }
+    logging: false,
+  },
 };

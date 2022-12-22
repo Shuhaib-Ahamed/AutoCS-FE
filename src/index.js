@@ -2,11 +2,8 @@ import express from "express";
 import routes from "./api/index.js";
 import { failed } from "./utils/responseApi.js";
 import expresConfig from "./middlewares/express.js";
-import configurePassport from "./middlewares/passport.js";
 import configueDatabase from "./config/database.js";
-import * as dotenv from "dotenv";
-
-dotenv.config();
+import dotenv from "dotenv";
 
 // Initializes App
 const app = express();
@@ -14,11 +11,10 @@ const app = express();
 // Declare port
 const port = process.env.PORT || 9000;
 
+dotenv.config();
+
 // Initialize Database
 configueDatabase();
-
-// Initialize passport (some login mechanism)
-configurePassport();
 
 // Attach middleares
 expresConfig(app);

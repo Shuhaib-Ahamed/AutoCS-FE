@@ -1,22 +1,44 @@
 import express from "express";
 import controller from "./chain.controller.js";
 import multer from "multer";
+import authenticate from "../../middlewares/authenticate.js";
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const router = express.Router();
 
-router.post("/upload", upload.single("file"), controller.uploadAsset);
+router.post(
+  "/upload",
+  upload.single("file"),
+  authenticate,
+  controller.uploadAsset
+);
 
-router.post("/transfer", upload.fields(), controller.transferAsset);
+router.post(
+  "/transfer",
+  upload.fields(),
+  authenticate,
+  controller.transferAsset
+);
 
-router.post("/download", upload.single("file"), controller.downloadAsset);
+router.post(
+  "/download",
+  upload.single("file"),
+  authenticate,
+  controller.downloadAsset
+);
 
-router.post("/searchAssetById", upload.fields(), controller.searchAssetById);
+router.post(
+  "/searchAssetById",
+  upload.fields(),
+  authenticate,
+  controller.searchAssetById
+);
 
 router.post(
   "/searchAssetByMetadata",
   upload.fields(),
+  authenticate,
   controller.searchAssetByMetadata
 );
 
