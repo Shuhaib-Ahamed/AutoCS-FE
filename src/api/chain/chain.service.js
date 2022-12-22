@@ -1,7 +1,7 @@
 //BigChainDB interface
 import BigchainDB from "bigchaindb-driver";
-import encryptor from "../../utils/encryption.js";
-import BigChainDbI from "../../utils/bigChainDbI.js";
+import encryptor from "../../utils/encrypt.js";
+import BigChainDbI from "../../utils/chainLogic.js";
 const bdbUser = new BigchainDB.Ed25519Keypair();
 const API_PATH = process.env.BIG_CHAIN_NET;
 const conn = new BigchainDB.Connection(API_PATH);

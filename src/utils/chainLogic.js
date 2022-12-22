@@ -1,5 +1,5 @@
 import BigchainDB from "bigchaindb-driver";
-import encryptor from "./encryption.js";
+import encryptor from "./encrypt.js";
 const API_PATH = process.env.BIG_CHAIN_NET;
 const chainConnection = new BigchainDB.Connection(API_PATH);
 
