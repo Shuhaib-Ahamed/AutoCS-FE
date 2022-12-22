@@ -42,11 +42,8 @@ export default {
         username: user.username,
       };
       return {
-        success: true,
-        data: {
-          token: user.generateJWT(),
-          user: userData,
-        },
+        token: user.generateJWT(),
+        user: userData,
       };
     } catch (error) {
       return {
@@ -71,7 +68,17 @@ export default {
   },
 
   createAccount: async (body) => {
+    console.log(body);
     const { email, username } = body;
+
+    //generate random keypair from stellar
+    const pair = StellarSdk.Keypair.random();
+
+    const credentials = {
+      publicKey: pair.publicKey(),
+      secretKey: pair.secret(),
+    };
+
     try {
       // check email is exist or not
       const userByEmail = await User.findOne({ email });
@@ -89,8 +96,21 @@ export default {
           message: messages.USERNAME_ALREADY_EXIST,
         };
       }
-      const newUser = await new User({ ...body }).save();
-      return newUser;
+
+      const stellarResponse = await fetch(
+        `https://friendbot.stellar.org?addr=${encodeURIComponent(
+          pair.publicKey()
+        )}`
+      );
+
+      if (stellarResponse) {
+        const { publicKey } = credentials;
+        await new User({ publicKey, ...body }).save();
+
+        return { ...credentials };
+      } else {
+        return { message: messages.INTERNAL_SERVER_ERROR };
+      }
     } catch (error) {
       console.log(error);
       return { message: messages.INTERNAL_SERVER_ERROR };

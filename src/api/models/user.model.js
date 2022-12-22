@@ -21,10 +21,11 @@ const userSchema = mongoose.Schema(
     password: {
       type: String,
       required: "Your password is required",
+      trim: true,
       min: 6,
     },
     role: { type: String, enum: Role, default: Role.BUYER, required: true },
-
+    publicKey: { type: String, unique: true, trim: true, required: false },
     isVerified: {
       type: Boolean,
       default: false,
@@ -72,6 +73,7 @@ userSchema.methods.comparePassword = function (password) {
 userSchema.methods.generateJWT = function () {
   let payload = {
     id: this._id,
+    publicKey: this.publicKey,
   };
 
   return jwt.sign(payload, process.env.JWT_SECRET, {
