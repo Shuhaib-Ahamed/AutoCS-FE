@@ -2,32 +2,26 @@ import express from "express";
 import routes from "./api/index.js";
 import { failed } from "./utils/responseApi.js";
 import expresConfig from "./middlewares/express.js";
-import passport from "./middlewares/passport.js";
-import database from "./config/database.js";
+import configurePassport from "./middlewares/passport.js";
+import configueDatabase from "./config/database.js";
 import * as dotenv from "dotenv";
 
 dotenv.config();
+
+// Initializes App
 const app = express();
+
+// Declare port
 const port = process.env.PORT || 9000;
 
 // Initialize Database
-database();
-
-/**
- * Enable cors & helmet
- */
+configueDatabase();
 
 // Initialize passport (some login mechanism)
-passport();
+configurePassport();
 
 // Attach middleares
 expresConfig(app);
-
-/**
- * Transform Payload.
- */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 /**
  * Check API health.
@@ -64,6 +58,5 @@ app.listen(port, (err) => {
     console.log(err);
     process.exit(1);
   }
-
   console.log(`Server listening on port: ${port}`);
 });

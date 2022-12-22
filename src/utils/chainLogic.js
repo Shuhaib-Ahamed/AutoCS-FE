@@ -3,7 +3,7 @@ import encryptor from "./encrypt.js";
 const API_PATH = process.env.BIG_CHAIN_NET;
 const chainConnection = new BigchainDB.Connection(API_PATH);
 
-let BigChainDbI = {
+let ChainFunctions = {
   createSimpleAsset: async (keypair, asset, metadata) => {
     const txSimpleAsset = BigchainDB.Transaction.makeCreateTransaction(
       asset,
@@ -38,7 +38,7 @@ let BigChainDbI = {
   },
 
   downloadAsset: async (assetId, encryptionKey) => {
-    let foundAsset = await BigChainDbI.searchAssetById(assetId);
+    let foundAsset = await ChainFunctions.searchAssetById(assetId);
     let decryptedFile = null;
 
     if (foundAsset.res && !foundAsset.isErr) {
@@ -85,7 +85,7 @@ let BigChainDbI = {
     let result = { isErr: false, res: assetObj };
 
     //Fetch the Asset by assetId or transactionId
-    let fetchAsset = await BigChainDbI.searchAssetById(assetId);
+    let fetchAsset = await ChainFunctions.searchAssetById(assetId);
 
     if (fetchAsset.res && !fetchAsset.isErr) {
       //Transfer the Asset
@@ -124,4 +124,4 @@ let BigChainDbI = {
   },
 };
 
-export default BigChainDbI;
+export default ChainFunctions;

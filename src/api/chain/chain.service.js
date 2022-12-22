@@ -1,19 +1,17 @@
 //BigChainDB interface
 import BigchainDB from "bigchaindb-driver";
 import encryptor from "../../utils/encrypt.js";
-import BigChainDbI from "../../utils/chainLogic.js";
-const bdbUser = new BigchainDB.Ed25519Keypair();
+import ChainFunctions from "../../utils/chainLogic.js";
+
+const getKeypairFromChain = new BigchainDB.Ed25519Keypair();
 const API_PATH = process.env.BIG_CHAIN_NET;
-const conn = new BigchainDB.Connection(API_PATH);
+new BigchainDB.Connection(API_PATH);
 
 export default {
   upload: async (req, res) => {
     const uploadedFiles = req.file;
     const formData = req.body;
-
-    console.log("uploaded files", uploadedFiles);
-    console.log("form data", formData);
-    console.log("encryption key", formData["encryptionKey"]);
+    const assetKeyPair = getKeypairFromChain;
 
     const assetdata = {
       model: {
@@ -34,9 +32,7 @@ export default {
 
     let { encryptionKey, ...excludedMetaData } = { ...metadata };
 
-    const assetKeyPair = bdbUser;
-
-    let result = await BigChainDbI.createSimpleAsset(
+    let result = await ChainFunctions.createSimpleAsset(
       assetKeyPair,
       assetdata,
       excludedMetaData
@@ -56,10 +52,9 @@ export default {
     const encryptionKey = formData["encryptionKey"];
     const assetId = formData["assetId"];
 
-    let result = await BigChainDbI.downloadAsset(assetId, encryptionKey);
+    let result = await ChainFunctions.downloadAsset(assetId, encryptionKey);
 
     if (!result) {
-      console.log(result);
       return { message: `"error when getting asset with id= " + ${assetId}` };
     }
 
@@ -72,10 +67,9 @@ export default {
     const formData = body;
     if (!formData.assetId) return;
 
-    let result = await BigChainDbI.searchAssetById(formData.assetId);
+    let result = await ChainFunctions.searchAssetById(formData.assetId);
 
     if (result.isErr) {
-      console.log(result);
       return {
         message: `"error when getting asset with id= " + ${formData.assetId}`,
       };
@@ -90,7 +84,7 @@ export default {
     const formData = body;
     if (!formData.metadataKeyword) return;
 
-    let result = await BigChainDbI.searchAssetByMetadata(
+    let result = await ChainFunctions.searchAssetByMetadata(
       formData.metadataKeyword
     );
 
@@ -108,12 +102,12 @@ export default {
   transferAsset: async (req, res) => {
     const formData = req;
 
-    let { txId, issuerKeyPair, ...metaData } = { ...formData };
+    let { assetId, issuerKeyPair, ...metaData } = { ...formData };
 
-    const senderKeyPair = bdbUser;
+    const senderKeyPair = getKeypairFromChain;
 
     // txId, keypairTo, metaData, keypairFrom
-    let result = await BigChainDbI.transferAsset(
+    let result = await ChainFunctions.transferAsset(
       formData.assetId,
       senderKeyPair,
       metaData,
