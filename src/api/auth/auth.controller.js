@@ -8,6 +8,7 @@ export default {
 
       success(res, 200, result);
     } catch (error) {
+      console.log(error);
       return next(error);
     }
   },
@@ -17,6 +18,7 @@ export default {
       const result = await authService.createAccount(req.body);
       success(res, 201, result);
     } catch (error) {
+      console.log(error);
       return next(error);
     }
   },

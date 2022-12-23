@@ -11,6 +11,7 @@ export default {
   login: async (body) => {
     try {
       const { email, password } = body;
+      const accountArray = [];
 
       // check account is exist or not
       const user = await User.findOne({ email });
@@ -34,41 +35,39 @@ export default {
       //     message: messages.ACCOUNT_NOT_VERIFIED,
       //   };
 
+      // the JS SDK uses promises for most actions, such as retrieving an account
+
+      const account = await setllarServer.loadAccount(user.publicKey);
+
+      account.balances.forEach(function (balance) {
+        const account = {
+          type: balance.asset_type,
+          balance: balance.balance,
+        };
+        accountArray.push(account);
+      });
+
       // Login successful, write token, and send back user
       const userData = {
         id: user.id,
         name: user.name,
         email: user.email,
         username: user.username,
+        account: { ...accountArray, account },
       };
       return {
         token: user.generateJWT(),
         user: userData,
       };
     } catch (error) {
+      console.log(error);
       return {
         message: messages.INTERNAL_SERVER_ERROR,
       };
     }
-
-    // const { accountId } = body;
-    // const accountArray = [];
-
-    // // the JS SDK uses promises for most actions, such as retrieving an account
-    // const account = await setllarServer.loadAccount(accountId);
-
-    // account.balances.forEach(function (balance) {
-    //   const account = {
-    //     type: balance.asset_type,
-    //     balance: balance.balance,
-    //   };
-    //   accountArray.push(account);
-    // });
-    // return { ...accountArray, account };
   },
 
   createAccount: async (body) => {
-    console.log(body);
     const { email, username } = body;
 
     //generate random keypair from stellar
@@ -78,6 +77,11 @@ export default {
       publicKey: pair.publicKey(),
       secretKey: pair.secret(),
     };
+
+    if (body.role === "ADMIN")
+      return {
+        message: messages.ACCOUNT_NOT_VERIFIED,
+      };
 
     try {
       // check email is exist or not
@@ -103,9 +107,13 @@ export default {
         )}`
       );
 
-      if (stellarResponse) {
-        const { publicKey } = credentials;
-        await new User({ publicKey, ...body }).save();
+      const res = await stellarResponse.json();
+
+      if (res) {
+        body.publicKey = credentials.publicKey;
+
+        //save object in mongo
+        await new User({ ...body }).save();
 
         return { ...credentials };
       } else {
@@ -116,26 +124,4 @@ export default {
       return { message: messages.INTERNAL_SERVER_ERROR };
     }
   },
-
-  //   // create a completely new and unique pair of keys
-  //   const pair = StellarSdk.Keypair.random();
-
-  //   const credentials = {
-  //     publicKey: pair.publicKey(),
-  //     secretKey: pair.secret(),
-  //   };
-
-  //   try {
-  //     const response = await fetch(
-  //       `https://friendbot.stellar.org?addr=${encodeURIComponent(
-  //         pair.publicKey()
-  //       )}`
-  //     );
-  //     const responseJSON = await response.json();
-  //     console.log("SUCCESS! You have a new account :)\n", responseJSON);
-  //     return { ...responseJSON, credentials };
-  //   } catch (e) {
-  //     console.error("ERROR!", e);
-  //   }
-  // },
 };

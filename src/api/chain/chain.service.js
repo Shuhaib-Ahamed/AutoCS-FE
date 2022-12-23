@@ -1,8 +1,15 @@
-//BigChainDB interface
+import StellarSdk from "stellar-sdk";
 import BigchainDB from "bigchaindb-driver";
 import encryptor from "../../utils/encrypt.js";
 import ChainFunctions from "../../utils/chainLogic.js";
+import { NETWORKS } from "../../utils/networks.js";
 
+//Stellar
+const stellarServer = new StellarSdk.Server(
+  "https://horizon-testnet.stellar.org"
+);
+
+//Big chain
 const getKeypairFromChain = new BigchainDB.Ed25519Keypair();
 const API_PATH = process.env.BIG_CHAIN_NET;
 new BigchainDB.Connection(API_PATH);
@@ -11,6 +18,7 @@ export default {
   upload: async (req, res) => {
     const uploadedFiles = req.file;
     const formData = req.body;
+    const secretKey = formData["encryptionKey"].toString();
     const assetKeyPair = getKeypairFromChain;
 
     const assetdata = {
@@ -21,7 +29,7 @@ export default {
     };
 
     let json = JSON.stringify(uploadedFiles);
-    let cypher = encryptor.fileEncrypt(json, formData["encryptionKey"]);
+    let cypher = encryptor.fileEncrypt(json, secretKey);
     let cypherStringified = cypher.toString();
     assetdata.model.encrypted_model = cypherStringified;
 
@@ -32,19 +40,60 @@ export default {
 
     let { encryptionKey, ...excludedMetaData } = { ...metadata };
 
-    let result = await ChainFunctions.createSimpleAsset(
-      assetKeyPair,
-      assetdata,
-      excludedMetaData
-    );
+    try {
+      let result = await ChainFunctions.createSimpleAsset(
+        assetKeyPair,
+        assetdata,
+        excludedMetaData
+      );
 
-    if (result.isErr) {
+      if (result.isErr) {
+        return { message: "Error when uploading asset!" };
+      }
+
+      // Next, you'll need to load the account that you want to add data to
+
+      const sourceKeypair = StellarSdk.Keypair.fromSecret(secretKey);
+      const sourceAccount = await stellarServer.loadAccount(
+        sourceKeypair.publicKey()
+      );
+
+      //data to be encrypted before sending to the blockchain
+      const chainData = {
+        assetId: result.res.id,
+        assetKeyPair: assetKeyPair,
+      };
+
+      //Encrypt the assetID
+      let cypher = encryptor.generateHash(JSON.stringify(chainData), secretKey);
+      let cypherStringified = cypher.toString();
+
+      // Then, you can create a transaction to add data to the account
+      var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+        //define the base fee
+        fee: 100,
+        networkPassphrase: NETWORKS.TESTNET,
+      })
+        .addOperation(
+          StellarSdk.Operation.manageData({
+            name: metadata.assetTitle,
+            value: cypherStringified,
+          })
+        )
+        .setTimeout(30)
+        .build();
+
+      // Sign the transaction with the account's secret key
+      transaction.sign(sourceKeypair);
+
+      // Finally, submit the transaction to the network
+      const stellarSubmit = await stellarServer.submitTransaction(transaction);
+
+      return { message: "Upload successfull", data: stellarSubmit };
+    } catch (error) {
+      console.log(error);
       return { message: "Error when uploading asset!" };
     }
-
-    const response = { ...assetKeyPair, ...result.res };
-
-    return { message: "Upload successfull", response };
   },
 
   downloadAsset: async (body) => {

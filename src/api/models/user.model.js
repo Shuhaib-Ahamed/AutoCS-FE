@@ -26,6 +26,10 @@ const userSchema = mongoose.Schema(
     },
     role: { type: String, enum: Role, default: Role.BUYER, required: true },
     publicKey: { type: String, unique: true, trim: true, required: false },
+    data: {
+      type: Object,
+      required: false,
+    },
     isVerified: {
       type: Boolean,
       default: false,
@@ -74,6 +78,7 @@ userSchema.methods.generateJWT = function () {
   let payload = {
     id: this._id,
     publicKey: this.publicKey,
+    role: this.role,
   };
 
   return jwt.sign(payload, process.env.JWT_SECRET, {
