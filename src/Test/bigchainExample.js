@@ -182,17 +182,17 @@ async function createSimpleAsset(keypair, asset, metadata) {
     });
 }
 
-async function getAssetById(assetId) {
-  return conn.getTransaction(assetId).then((res) => {
+async function getAssetById(assetID) {
+  return conn.getTransaction(assetID).then((res) => {
     console.log("Retrieve asset by id", res);
     return res;
   });
 }
 
-async function appendTransaction(keypair, assetId, metadata) {
+async function appendTransaction(keypair, assetID, metadata) {
   // First, we query for the asset that we created
   conn
-    .listTransactions(assetId)
+    .listTransactions(assetID)
     .then((txList) => {
       if (txList.length <= 1) {
         return txList;
@@ -206,7 +206,7 @@ async function appendTransaction(keypair, assetId, metadata) {
           }
         })
       );
-      // In our case there should be just one input not spend with the assetId
+      // In our case there should be just one input not spend with the assetID
       return txList.filter((tx) => inputTransactions.indexOf(tx.id) === -1);
     })
     .then((tx) => {

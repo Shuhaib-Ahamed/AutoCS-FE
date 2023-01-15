@@ -37,23 +37,35 @@ let ChainFunctions = {
     return result;
   },
 
-  downloadAsset: async (assetId, encryptionKey) => {
-    let foundAsset = await ChainFunctions.searchAssetById(assetId);
+  downloadAsset: async (assetID, encryptionData) => {
+    let foundAsset = await ChainFunctions.searchAssetById(assetID);
     let decryptedFile = null;
 
     if (foundAsset.res && !foundAsset.isErr) {
       const encModel = foundAsset.res.asset.data.model.encrypted_model;
-      decryptedFile = encryptor.fileDecrypt(encModel, encryptionKey);
+
+    
+
+      const dataToBeEncrypted = {
+        ciphertext: encModel,
+        nonce: encryptionData.nonce,
+        ephemPubKey: encryptionData.ephemPubKey,
+      };
+
+      decryptedFile = encryptor.asymmetricDecryption(
+        dataToBeEncrypted,
+        encryptionData.receiverSecretKey
+      );
     }
     return decryptedFile;
   },
 
-  searchAssetById: async (assetId) => {
+  searchAssetById: async (assetID) => {
     let assetObj = null;
     let result = { isErr: false, res: assetObj };
 
     try {
-      assetObj = await chainConnection.getTransaction(assetId); //or USE: searchAssets OR pollStatusAndFetchTransaction
+      assetObj = await chainConnection.getTransaction(assetID); //or USE: searchAssets OR pollStatusAndFetchTransaction
     } catch (err) {
       result.isErr = true;
       return result;
@@ -80,12 +92,12 @@ let ChainFunctions = {
     return result;
   },
 
-  transferAsset: async (assetId, senderKeypair, metaData, issureKeyPair) => {
+  transferAsset: async (assetID, senderKeypair, metaData, issureKeyPair) => {
     let assetObj = null;
     let result = { isErr: false, res: assetObj };
 
-    //Fetch the Asset by assetId or transactionId
-    let fetchAsset = await ChainFunctions.searchAssetById(assetId);
+    //Fetch the Asset by assetID or transactionId
+    let fetchAsset = await ChainFunctions.searchAssetById(assetID);
 
     if (fetchAsset.res && !fetchAsset.isErr) {
       //Transfer the Asset

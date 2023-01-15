@@ -3,6 +3,7 @@ import BigchainDB from "bigchaindb-driver";
 import encryptor from "../../utils/encrypt.js";
 import ChainFunctions from "../../utils/chainLogic.js";
 import { NETWORKS } from "../../utils/networks.js";
+import { combine, split } from "shamirs-secret-sharing";
 
 //Stellar
 const stellarServer = new StellarSdk.Server(
@@ -18,7 +19,8 @@ export default {
   upload: async (req, res) => {
     const uploadedFiles = req.file;
     const formData = req.body;
-    const secretKey = formData["encryptionKey"].toString();
+    const privateKey = formData["privateKey"];
+    const publicKey = formData["publicKey"];
     const assetKeyPair = getKeypairFromChain;
 
     const assetdata = {
@@ -28,45 +30,59 @@ export default {
       },
     };
 
-    let json = JSON.stringify(uploadedFiles);
-    let cypher = encryptor.fileEncrypt(json, secretKey);
-    let cypherStringified = cypher.toString();
+    let file = JSON.stringify(uploadedFiles);
+    let cypher = encryptor.asymmetricEncryption(file, publicKey, privateKey);
+    let cypherStringified = cypher.encryptedData.toString();
     assetdata.model.encrypted_model = cypherStringified;
+
+    var { ciphertext, ...chainData } = cypher;
 
     let metadata = {};
     for (let key of Object.keys(formData)) {
       metadata[key] = formData[key];
     }
 
-    let { encryptionKey, ...excludedMetaData } = { ...metadata };
+    //delete privateKey and publicKey
+    delete metadata.privateKey;
+    delete metadata.privateKey;
 
     try {
       let result = await ChainFunctions.createSimpleAsset(
         assetKeyPair,
         assetdata,
-        excludedMetaData
+        metadata
       );
 
+      console.log(result);
       if (result.isErr) {
-        return { message: "Error when uploading asset!" };
+        return { message: "Bigchain DB error when uploading asset!" };
       }
 
       // Next, you'll need to load the account that you want to add data to
-
-      const sourceKeypair = StellarSdk.Keypair.fromSecret(secretKey);
+      const sourceKeypair = StellarSdk.Keypair.fromSecret(privateKey);
       const sourceAccount = await stellarServer.loadAccount(
         sourceKeypair.publicKey()
       );
 
-      //data to be encrypted before sending to the blockchain
-      const chainData = {
-        assetId: result.res.id,
-        assetKeyPair: assetKeyPair,
-      };
+      chainData.assetKeyPair = assetKeyPair;
+      chainData.assetID = result.res.id;
 
-      //Encrypt the assetID
-      let cypher = encryptor.generateHash(JSON.stringify(chainData), secretKey);
-      let cypherStringified = cypher.toString();
+      //data to be encrypted before sending to the blockchain
+      let cypher = encryptor.symmetricEncryption(
+        JSON.stringify(assetKeyPair),
+        privateKey
+      );
+
+      let cypherStringified = cypher.toString("base64");
+      let shares = [];
+
+      for (let i = 0; i < 3; i++) {
+        const share = cypherStringified.slice(
+          (i * cypherStringified.length) / 3,
+          ((i + 1) * cypherStringified.length) / 3
+        );
+        shares.push(share);
+      }
 
       // Then, you can create a transaction to add data to the account
       var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
@@ -76,8 +92,20 @@ export default {
       })
         .addOperation(
           StellarSdk.Operation.manageData({
-            name: metadata.assetTitle,
-            value: cypherStringified,
+            name: metadata.assetTitle + "-0",
+            value: shares[0],
+          })
+        )
+        .addOperation(
+          StellarSdk.Operation.manageData({
+            name: metadata.assetTitle + "-1",
+            value: shares[1],
+          })
+        )
+        .addOperation(
+          StellarSdk.Operation.manageData({
+            name: metadata.assetTitle + "-2",
+            value: shares[2],
           })
         )
         .setTimeout(30)
@@ -89,22 +117,32 @@ export default {
       // Finally, submit the transaction to the network
       const stellarSubmit = await stellarServer.submitTransaction(transaction);
 
-      return { message: "Upload successfull", data: stellarSubmit };
+      return {
+        message: "Upload successfull",
+        data: stellarSubmit,
+        assetData: chainData,
+      };
     } catch (error) {
       console.log(error);
-      return { message: "Error when uploading asset!" };
+      return {
+        message: "Stellar error when creating transaction on the asset!",
+      };
     }
   },
 
   downloadAsset: async (body) => {
-    const formData = body;
-    const encryptionKey = formData["encryptionKey"];
-    const assetId = formData["assetId"];
+    const { privateKey, assetData } = body;
 
-    let result = await ChainFunctions.downloadAsset(assetId, encryptionKey);
+    let result = await ChainFunctions.downloadAsset(assetData.assetID, {
+      nonce: assetData.nonce,
+      ephemPubKey: assetData.ephemPubKey,
+      receiverSecretKey: privateKey,
+    });
 
     if (!result) {
-      return { message: `"error when getting asset with id= " + ${assetId}` };
+      return {
+        message: `"error when getting asset with id= " + ${assetData.assetID}`,
+      };
     }
 
     const response = result;
@@ -114,13 +152,13 @@ export default {
 
   searchAssetById: async (body) => {
     const formData = body;
-    if (!formData.assetId) return;
+    if (!formData.assetID) return;
 
-    let result = await ChainFunctions.searchAssetById(formData.assetId);
+    let result = await ChainFunctions.searchAssetById(formData.assetID);
 
     if (result.isErr) {
       return {
-        message: `"error when getting asset with id= " + ${formData.assetId}`,
+        message: `"error when getting asset with id= " + ${formData.assetID}`,
       };
     }
 
@@ -151,13 +189,13 @@ export default {
   transferAsset: async (req, res) => {
     const formData = req;
 
-    let { assetId, issuerKeyPair, ...metaData } = { ...formData };
+    let { assetID, issuerKeyPair, ...metaData } = { ...formData };
 
     const senderKeyPair = getKeypairFromChain;
 
     // txId, keypairTo, metaData, keypairFrom
     let result = await ChainFunctions.transferAsset(
-      formData.assetId,
+      formData.assetID,
       senderKeyPair,
       metaData,
       formData.issuerKeyPair
