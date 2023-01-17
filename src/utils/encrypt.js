@@ -1,9 +1,5 @@
-import CryptoJS from "crypto-js";
 import crypto from "crypto";
-import nacl from "tweetnacl";
-import util from "tweetnacl-util";
-import ed2curve from "ed2curve";
-import { NIFTRON } from "niftron-sdk";
+import { NIFTRON } from "niftron-client-sdk";
 
 export default {
   generateSalt: () => {
@@ -47,5 +43,9 @@ export default {
       fromSecretKey
     );
     return response;
+  },
+
+  generateHash: (salt, pwd) => {
+    return crypto.createHmac("sha256", salt).update(pwd).digest("hex");
   },
 };

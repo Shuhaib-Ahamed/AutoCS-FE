@@ -42,4 +42,11 @@ router.post(
   controller.searchAssetByMetadata
 );
 
+router.post(
+  "/decryptAssetObject",
+  upload.fields(),
+  authenticate,
+  controller.decryptAssetObject
+);
+
 export default router;

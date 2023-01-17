@@ -37,27 +37,43 @@ let ChainFunctions = {
     return result;
   },
 
-  downloadAsset: async (assetID, encryptionData) => {
+  downloadAsset: async (body) => {
+    const {
+      assetID,
+      fromSecretKey,
+      nonce,
+      senderPublicKey,
+      receiverPublicKey,
+    } = body;
+
     let foundAsset = await ChainFunctions.searchAssetById(assetID);
     let decryptedFile = null;
 
     if (foundAsset.res && !foundAsset.isErr) {
       const encModel = foundAsset.res.asset.data.model.encrypted_model;
 
-    
-
-      const dataToBeEncrypted = {
-        ciphertext: encModel,
-        nonce: encryptionData.nonce,
-        ephemPubKey: encryptionData.ephemPubKey,
+      const encyptionObject = {
+        encryptedData: encModel,
+        nonce: nonce,
+        senderPublicKey: senderPublicKey,
+        receiverPublicKey: receiverPublicKey,
       };
 
       decryptedFile = encryptor.asymmetricDecryption(
-        dataToBeEncrypted,
-        encryptionData.receiverSecretKey
+        encyptionObject,
+        fromSecretKey
       );
+
+      delete foundAsset.res.asset;
+
+      var data = {
+        meatadata: foundAsset.res,
+        decryptedFile: decryptedFile,
+      };
+
+      console.log("decryptedFile", decryptedFile);
     }
-    return decryptedFile;
+    return data;
   },
 
   searchAssetById: async (assetID) => {
@@ -91,7 +107,6 @@ let ChainFunctions = {
     result.res = assetObj;
     return result;
   },
-
   transferAsset: async (assetID, senderKeypair, metaData, issureKeyPair) => {
     let assetObj = null;
     let result = { isErr: false, res: assetObj };

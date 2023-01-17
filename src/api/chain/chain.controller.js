@@ -23,7 +23,7 @@ export default {
 
   downloadAsset: async (req, res, next) => {
     try {
-      const result = await chainService.downloadAsset(req.body);
+      const result = await chainService.downloadAsset(req);
       success(res, 201, result);
     } catch (error) {
       return next(error);
@@ -40,6 +40,15 @@ export default {
   searchAssetByMetadata: async (req, res, next) => {
     try {
       const result = await chainService.searchAssetByMetadata(req.body);
+      success(res, 201, result);
+    } catch (error) {
+      return next(error);
+    }
+  },
+
+  decryptAssetObject: async (req, res, next) => {
+    try {
+      const result = await chainService.decryptAssetObject(req.body);
       success(res, 201, result);
     } catch (error) {
       return next(error);

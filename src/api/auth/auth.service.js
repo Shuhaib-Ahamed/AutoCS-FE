@@ -1,6 +1,5 @@
 import StellarSdk from "stellar-sdk";
 import fetch from "node-fetch";
-import codes from "../../utils/httpHelper.js";
 import messages from "../../utils/messages.js";
 import User from "../models/user.model.js";
 const STELAR_API = "https://horizon-testnet.stellar.org";
