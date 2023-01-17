@@ -33,8 +33,6 @@ export default {
       field,
       fromSecretKey
     );
-
-    console.log("AES", response);
     return response;
   },
   symmetricDecryption: (encryptedField, fromSecretKey) => {
@@ -45,7 +43,7 @@ export default {
     return response;
   },
 
-  generateHash: (salt, pwd) => {
-    return crypto.createHmac("sha256", salt).update(pwd).digest("hex");
+  generateHash: (value) => {
+    return crypto.createHash("sha256").update(value).digest("hex");
   },
 };

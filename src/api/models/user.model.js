@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { Role } from "../../utils/enums.js";
+import { ROLE } from "../../utils/enums.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import Email from "./Email.model.js";
@@ -24,7 +24,7 @@ const userSchema = mongoose.Schema(
       trim: true,
       min: 6,
     },
-    role: { type: String, enum: Role, default: Role.BUYER, required: true },
+    role: { type: String, enum: ROLE, default: ROLE.BUYER, required: true },
     publicKey: { type: String, unique: true, trim: true, required: false },
     data: {
       type: Object,
@@ -61,7 +61,6 @@ userSchema.pre("save", function (next) {
 
     bcrypt.hash(user.password, salt, (err, hash) => {
       if (err) return next(err);
-
       user.password = hash;
       next();
     });
@@ -82,7 +81,7 @@ userSchema.methods.generateJWT = function () {
   };
 
   return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: "1d",
+    expiresIn: "3d",
   });
 };
 

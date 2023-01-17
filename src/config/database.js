@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import User from "../api/models/user.model.js";
-import { Role } from "../utils/enums.js";
+import { ROLE } from "../utils/enums.js";
 
 function seedAdmin() {
   User.find({ username: "admin" }).then((users) => {
@@ -10,7 +10,7 @@ function seedAdmin() {
         username: "admin",
         email: "addmin@email.com",
         password: pwd,
-        role: Role.ADMIN,
+        role: ROLE.ADMIN,
       };
 
       User.create(adminData).then((admin) => {

@@ -21,9 +21,9 @@ export default {
     }
   },
 
-  downloadAsset: async (req, res, next) => {
+  searchAndDecryptAsset: async (req, res, next) => {
     try {
-      const result = await chainService.downloadAsset(req);
+      const result = await chainService.searchAndDecryptAsset(req);
       success(res, 201, result);
     } catch (error) {
       return next(error);

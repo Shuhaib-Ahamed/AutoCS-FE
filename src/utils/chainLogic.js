@@ -37,14 +37,8 @@ let ChainFunctions = {
     return result;
   },
 
-  downloadAsset: async (body) => {
-    const {
-      assetID,
-      fromSecretKey,
-      nonce,
-      senderPublicKey,
-      receiverPublicKey,
-    } = body;
+  searchAndDecryptAsset: async (body) => {
+    const { assetID, fromSecretKey } = body;
 
     let foundAsset = await ChainFunctions.searchAssetById(assetID);
     let decryptedFile = null;
@@ -52,28 +46,11 @@ let ChainFunctions = {
     if (foundAsset.res && !foundAsset.isErr) {
       const encModel = foundAsset.res.asset.data.model.encrypted_model;
 
-      const encyptionObject = {
-        encryptedData: encModel,
-        nonce: nonce,
-        senderPublicKey: senderPublicKey,
-        receiverPublicKey: receiverPublicKey,
-      };
+      decryptedFile = encryptor.symmetricDecryption(encModel, fromSecretKey);
 
-      decryptedFile = encryptor.asymmetricDecryption(
-        encyptionObject,
-        fromSecretKey
-      );
-
-      delete foundAsset.res.asset;
-
-      var data = {
-        meatadata: foundAsset.res,
-        decryptedFile: decryptedFile,
-      };
-
-      console.log("decryptedFile", decryptedFile);
+      foundAsset.res.asset = JSON.parse(decryptedFile);
     }
-    return data;
+    return foundAsset.res;
   },
 
   searchAssetById: async (assetID) => {
@@ -107,26 +84,21 @@ let ChainFunctions = {
     result.res = assetObj;
     return result;
   },
-  transferAsset: async (assetID, senderKeypair, metaData, issureKeyPair) => {
+  transferAsset: async (fetchAsset, senderKeypair, metaData, issureKeyPair) => {
     let assetObj = null;
     let result = { isErr: false, res: assetObj };
 
-    //Fetch the Asset by assetID or transactionId
-    let fetchAsset = await ChainFunctions.searchAssetById(assetID);
 
-    if (fetchAsset.res && !fetchAsset.isErr) {
+    if (fetchAsset) {
       //Transfer the Asset
-
       const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
         // signedTx to transfer and output index
-        [{ tx: fetchAsset.res, output_index: 0 }],
-
+        [{ tx: fetchAsset, output_index: 0 }],
         [
           BigchainDB.Transaction.makeOutput(
             BigchainDB.Transaction.makeEd25519Condition(senderKeypair.publicKey)
           ),
         ],
-
         // metadata
         metaData
       );

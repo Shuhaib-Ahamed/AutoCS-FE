@@ -31,13 +31,12 @@ export default {
       },
     };
 
-    let cypher = encryptor.asymmetricEncryption(
+    let cypher = encryptor.symmetricEncryption(
       JSON.stringify(uploadedFile),
-      toPublicKey,
       fromSecretKey
     );
 
-    let cypherStringified = cypher.encryptedData;
+    let cypherStringified = cypher.toString();
     assetdata.model.encrypted_model = cypherStringified;
 
     let metadata = {};
@@ -49,26 +48,7 @@ export default {
     delete metadata.toPublicKey;
     delete metadata.fromSecretKey;
 
-    //prepare the encryptionObject
-    var { encryptedData, ...encryptionObject } = cypher;
-
-    const assetObject = {
-      publicKey: toPublicKey,
-      assetTitle: metadata.assetTitle,
-      assetDescription: metadata.assetDescription,
-      encryptionObject: encryptor.symmetricEncryption(
-        JSON.stringify({
-          encryptionObject: encryptionObject,
-          assetKeyPair: assetKeyPair,
-        }),
-        fromSecretKey
-      ),
-    };
-
     try {
-      //save object in mongo
-      await new Asset({ ...assetObject }).save();
-
       let result = await ChainFunctions.createSimpleAsset(
         assetKeyPair,
         assetdata,
@@ -79,27 +59,29 @@ export default {
         return { message: "Bigchain DB error when uploading asset!" };
       }
 
+      //data to be encrypted before sending to the blockchain
+      let cypher = encryptor.symmetricEncryption(result.res.id, fromSecretKey);
+
+      //save object in mongoDB
+      const assetObject = {
+        publicKey: toPublicKey,
+        assetID: cypher.toString(),
+        assetTitle: metadata.assetTitle,
+        assetDescription: metadata.assetDescription,
+        assetKeyPair: encryptor.symmetricEncryption(
+          JSON.stringify({
+            assetKeyPair: assetKeyPair,
+          }),
+          fromSecretKey
+        ),
+      };
+      await new Asset({ ...assetObject }).save();
+
       // Next, you'll need to load the account that you want to add data to
       const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
       const sourceAccount = await stellarServer.loadAccount(
         sourceKeypair.publicKey()
       );
-
-      //data to be encrypted before sending to the blockchain
-      let cypher = encryptor.symmetricEncryption(result.res.id, fromSecretKey);
-
-      let cypherStringified = cypher.toString();
-      let shares = [];
-
-      for (let i = 0; i < 2; i++) {
-        const share = cypherStringified.slice(
-          (i * cypherStringified.length) / 2,
-          ((i + 1) * cypherStringified.length) / 2
-        );
-        shares.push(share);
-      }
-
-      console.log(shares);
 
       // Then, you can create a transaction to add data to the account
       var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
@@ -109,14 +91,8 @@ export default {
       })
         .addOperation(
           StellarSdk.Operation.manageData({
-            name: metadata.assetTitle + "-0",
-            value: shares[0],
-          })
-        )
-        .addOperation(
-          StellarSdk.Operation.manageData({
-            name: metadata.assetTitle + "-1",
-            value: shares[1],
+            name: metadata.assetTitle,
+            value: encryptor.generateHash(result.res.id),
           })
         )
         .setTimeout(30)
@@ -127,11 +103,9 @@ export default {
 
       // Finally, submit the transaction to the network
       const stellarSubmit = await stellarServer.submitTransaction(transaction);
-
       return {
         message: "Upload successfull",
         data: stellarSubmit,
-        assetData: encryptionObject,
       };
     } catch (error) {
       console.log(error);
@@ -166,8 +140,8 @@ export default {
     return response;
   },
 
-  downloadAsset: async (req) => {
-    let result = await ChainFunctions.downloadAsset(req.body);
+  searchAndDecryptAsset: async (req) => {
+    let result = await ChainFunctions.searchAndDecryptAsset(req.body);
 
     if (!result) {
       return {
@@ -217,33 +191,64 @@ export default {
   },
 
   transferAsset: async (req, res) => {
-    const formData = req;
-
-    let {
-      assetID,
-      toPublicKey,
-      fromSecretKey,
-      issureKeyPair,
-      encryptionObject,
-    } = {
-      ...formData,
-    };
-
+    let { assetID, issureKeyPair, fromSecretKey, toPublicKey, metadata } = req;
     const senderKeyPair = getKeypairFromChain;
 
-    // txId, keypairTo, metaData, keypairFrom
-    let result = await ChainFunctions.transferAsset(
+    //Fetch the Asset by assetID or transactionId
+    let assetResponse = await ChainFunctions.searchAndDecryptAsset({
       assetID,
-      senderKeyPair,
-      toPublicKey,
       fromSecretKey,
-      issureKeyPair,
-      encryptionObject,
-      formData
+    });
+
+    let cypher = encryptor.asymmetricEncryption(
+      JSON.stringify(assetResponse.asset),
+      toPublicKey,
+      fromSecretKey
     );
 
-    if (result) {
-      return { message: "Error when transfering asset!" };
+    let cypherStringified = cypher.encryptedData;
+    assetResponse.asset = cypherStringified;
+
+    const { encryptedData, ...encryptionObject } = cypher;
+
+    try {
+      //txId, keypairTo, metaData, keypairFrom;
+      var result = await ChainFunctions.transferAsset(
+        assetResponse,
+        senderKeyPair,
+        metadata,
+        issureKeyPair
+      );
+
+      if (result.isErr) {
+        return { message: "Error when transfering asset!" };
+      }
+
+      //data to be encrypted before sending to the blockchain
+      let cypher = encryptor.symmetricEncryption(assetResponse.id, toPublicKey);
+
+      //save object in mongoDB
+      const assetObject = {
+        publicKey: toPublicKey,
+        assetID: cypher.toString(),
+        assetTitle: assetResponse.metadata.assetTitle,
+        assetDescription: assetResponse.metadata.assetDescription,
+        assetKeyPair: encryptor.symmetricEncryption(
+          JSON.stringify({
+            senderKeyPair,
+          }),
+          toPublicKey
+        ),
+        encryptionObject: encryptor.symmetricEncryption(
+          JSON.stringify({
+            encryptionObject,
+          }),
+          toPublicKey
+        ),
+      };
+      await new Asset({ ...assetObject }).save();
+    } catch (error) {
+      console.log(error);
     }
 
     const response = { ...senderKeyPair, ...result };

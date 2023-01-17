@@ -22,10 +22,10 @@ router.post(
 );
 
 router.post(
-  "/download",
+  "/searchAndDecryptAsset",
   upload.single("file"),
   authenticate,
-  controller.downloadAsset
+  controller.searchAndDecryptAsset
 );
 
 router.post(
