@@ -27,9 +27,15 @@
     ]
   },
   "dependencies": {
+    "@chakra-ui/react": "2.4.9",
+    "@emotion/react": "11.10.5",
+    "@emotion/styled": "11.10.5",
+    "components": "0.1.0",
+    "framer-motion": "8.5.0",
     "next": "13.1.2",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "styled": "1.0.0"
   },
   "devDependencies": {
     "@commitlint/cli": "17.4.2",

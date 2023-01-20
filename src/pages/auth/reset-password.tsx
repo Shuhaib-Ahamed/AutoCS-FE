@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable prettier/prettier */
 import Head from 'next/head';
 import {
   Box,
@@ -11,5 +11,5 @@ import {
 } from '@chakra-ui/react';
 
 export default function Home() {
-  return <div>Hello</div>;
+  return <div>Reset Password</div>;
 }
