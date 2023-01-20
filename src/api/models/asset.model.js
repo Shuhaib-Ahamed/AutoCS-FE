@@ -8,15 +8,19 @@ const assetSchema = mongoose.Schema(
       required: "Public Key is required",
       trim: true,
     },
+<<<<<<< Updated upstream
     assetID: {
       type: String,
       required: "AssetID is required",
       unique: true,
     },
+=======
+>>>>>>> Stashed changes
     assetTitle: {
       type: String,
       required: "Asset Title is required",
       trim: true,
+<<<<<<< Updated upstream
     },
     assetDescription: {
       type: String,
@@ -33,6 +37,25 @@ const assetSchema = mongoose.Schema(
       default: STATE.OWNED,
       required: true,
     },
+=======
+      unique: true,
+    },
+    assetData: {
+      type: String,
+      required: "Asset Data is required",
+    },
+    assetPrice: {
+      type: Number,
+      required: "Asset Price is required",
+    },
+
+    // state: {
+    //   type: String,
+    //   enum: STATE,
+    //   default: STATE.OWNED,
+    //   required: true,
+    // },
+>>>>>>> Stashed changes
     isVerified: {
       type: Boolean,
       default: false,
@@ -44,6 +67,7 @@ const assetSchema = mongoose.Schema(
 );
 
 // Update state
+<<<<<<< Updated upstream
 assetSchema.pre("save", function (next) {
   const asset = this;
 
@@ -54,6 +78,18 @@ assetSchema.pre("save", function (next) {
   asset.state = STATE.TRANSFERD;
   return next();
 });
+=======
+// assetSchema.pre("save", function (next) {
+//   const asset = this;
+
+//   if (!asset.isModified("encryptionObject")) {
+//     return next();
+//   }
+
+//   asset.state = STATE.TRANSFERD;
+//   return next();
+// });
+>>>>>>> Stashed changes
 
 const Asset = mongoose.model("Asset", assetSchema);
 

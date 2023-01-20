@@ -45,7 +45,10 @@ export default {
     }
 
     //delete privateKey and publicKey and add encryptionData
+<<<<<<< Updated upstream
     delete metadata.toPublicKey;
+=======
+>>>>>>> Stashed changes
     delete metadata.fromSecretKey;
 
     try {
@@ -59,6 +62,7 @@ export default {
         return { message: "Bigchain DB error when uploading asset!" };
       }
 
+<<<<<<< Updated upstream
       //data to be encrypted before sending to the blockchain
       let cypher = encryptor.symmetricEncryption(result.res.id, fromSecretKey);
 
@@ -71,6 +75,17 @@ export default {
         assetKeyPair: encryptor.symmetricEncryption(
           JSON.stringify({
             assetKeyPair: assetKeyPair,
+=======
+      const assetObject = {
+        publicKey: toPublicKey,
+        assetTitle: metadata.assetTitle,
+        assetData: encryptor.symmetricEncryption(
+          JSON.stringify({
+            assetDescription: metadata.assetDescription,
+            assetID: result.res.id,
+            assetKeyPair: assetKeyPair,
+            assetPrice: metadata.assetPrice,
+>>>>>>> Stashed changes
           }),
           fromSecretKey
         ),
@@ -92,7 +107,18 @@ export default {
         .addOperation(
           StellarSdk.Operation.manageData({
             name: metadata.assetTitle,
+<<<<<<< Updated upstream
             value: encryptor.generateHash(result.res.id),
+=======
+            value: encryptor.generateHash(
+              JSON.stringify({
+                assetDescription: metadata.assetDescription,
+                assetID: result.res.id,
+                assetKeyPair: assetKeyPair,
+                assetPrice: metadata.assetPrice,
+              })
+            ),
+>>>>>>> Stashed changes
           })
         )
         .setTimeout(30)
@@ -224,12 +250,50 @@ export default {
         return { message: "Error when transfering asset!" };
       }
 
+<<<<<<< Updated upstream
       //data to be encrypted before sending to the blockchain
       let cypher = encryptor.symmetricEncryption(assetResponse.id, toPublicKey);
+=======
+      // Next, you'll need to load the account that you want to transfer data to
+      const destinationAccount = await stellarServer.loadAccount(toPublicKey);
+
+      // Then, you can create a transaction to add data to the account
+      var transaction = new StellarSdk.TransactionBuilder(destinationAccount, {
+        //define the base fee
+        fee: 100,
+        networkPassphrase: NETWORKS.TESTNET,
+      })
+        .TransactionBuilder(destinationAccount)
+        .addOperation(
+          StellarSdk.Operation.payment({
+            destination: toPublicKey,
+            asset: StellarSdk.Asset.native(),
+            amount: metadata.assetPrice, // deduct the asset price from the destination account
+          })
+        )
+        .addOperation(
+          StellarSdk.Operation.manageData({
+            name: metadata.assetTitle,
+            value: encryptor.generateHash(
+              JSON.stringify({
+                assetID: cypher,
+                assetKeyPair: senderKeyPair,
+                encryptionObject: encryptionObject,
+              })
+            ),
+          })
+        )
+        .setTimeout(30)
+        .build();
+
+      // Sign the transaction with the account's secret key
+      transaction.sign(sourceKeypair);
+>>>>>>> Stashed changes
 
       //save object in mongoDB
       const assetObject = {
         publicKey: toPublicKey,
+<<<<<<< Updated upstream
         assetID: cypher.toString(),
         assetTitle: assetResponse.metadata.assetTitle,
         assetDescription: assetResponse.metadata.assetDescription,
@@ -251,6 +315,29 @@ export default {
       console.log(error);
     }
 
+=======
+        assetTitle: assetResponse.metadata.assetTitle,
+        assetData: encryptor.symmetricEncryption(
+          JSON.stringify({
+            assetID: cypher,
+            assetKeyPair: senderKeyPair,
+            encryptionObject: encryptionObject,
+          }),
+          fromSecretKey
+        ),
+      };
+      await new Asset({ ...assetObject }).save();
+
+      // Finally, submit the transaction to the network
+      const stellarSubmit = await stellarServer.submitTransaction(transaction);
+      return {
+        message: "Transfer successfull",
+        data: stellarSubmit,
+      };
+    } catch (error) {
+      console.log(error);
+    }
+>>>>>>> Stashed changes
     const response = { ...senderKeyPair, ...result };
 
     return { message: "Transfer successfull!!", response };

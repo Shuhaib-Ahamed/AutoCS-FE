@@ -84,16 +84,28 @@ let ChainFunctions = {
     result.res = assetObj;
     return result;
   },
+<<<<<<< Updated upstream
   transferAsset: async (fetchAsset, senderKeypair, metaData, issureKeyPair) => {
+=======
+  transferAsset: async (fetchedAsset, senderKeypair, metaData, issureKeyPair) => {
+>>>>>>> Stashed changes
     let assetObj = null;
     let result = { isErr: false, res: assetObj };
 
 
+<<<<<<< Updated upstream
     if (fetchAsset) {
       //Transfer the Asset
       const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
         // signedTx to transfer and output index
         [{ tx: fetchAsset, output_index: 0 }],
+=======
+    if (fetchedAsset) {
+      //Transfer the Asset
+      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
+        // signedTx to transfer and output index
+        [{ tx: fetchedAsset, output_index: 0 }],
+>>>>>>> Stashed changes
         [
           BigchainDB.Transaction.makeOutput(
             BigchainDB.Transaction.makeEd25519Condition(senderKeypair.publicKey)
@@ -111,6 +123,12 @@ let ChainFunctions = {
 
       try {
         assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
+<<<<<<< Updated upstream
+=======
+        
+
+        
+>>>>>>> Stashed changes
       } catch (err) {
         result.isErr = true;
         return result;
