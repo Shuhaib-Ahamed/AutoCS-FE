@@ -19,14 +19,14 @@ export default function Head({
 
   return (
     <>
-      <title>EnvShare</title>
+      <title>AutoCS</title>
       <meta content="width=device-width, initial-scale=1" name="viewport" />
       <meta name="description" content={subtitle} />
       <meta name="theme-color" content="#000000" />
       <meta name="title" content={title} />
       <meta
         name="keywords"
-        content="envshare, secure, secrets, share, environment, variables"
+        content="AutoCS, secure, secrets, share, data, excahnge"
       />
       <meta name="language" content="English" />
       <meta name="revisit-after" content="7 days" />
