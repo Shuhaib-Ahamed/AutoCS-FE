@@ -10,13 +10,13 @@ export const demos: { name: string; items: Item[] }[] = [
     items: [
       {
         name: "Create An Account",
-        slug: "signup",
+        slug: "playground/signup",
         description:
           "Create and Web3 account and save the public and secret keys",
       },
       {
         name: "Login",
-        slug: "login",
+        slug: "playground/login",
         description: "Login to your Stellar account",
       },
     ],
@@ -26,17 +26,17 @@ export const demos: { name: string; items: Item[] }[] = [
     items: [
       {
         name: "Upload",
-        slug: "upload",
+        slug: "playground/upload",
         description: "Upload and encrypt data to BigchainDB",
       },
       {
         name: "SearchByTxId",
-        slug: "searchById",
+        slug: "playground/searchById",
         description: "Search for an asset by the transaction ID",
       },
       {
         name: "Transfer",
-        slug: "transfer",
+        slug: "playground/transfer",
         description:
           "Transfer an Asset using Asymettric encryption and BigChainDb",
       },
