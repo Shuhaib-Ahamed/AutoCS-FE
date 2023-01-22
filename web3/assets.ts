@@ -2,6 +2,8 @@ import StellarSdk, { Server } from "stellar-sdk";
 import { generateHash, symmetricEncryption } from "utils/encryptor";
 import { NETWORKS } from "lib/Types/Networks";
 
+//Big chain
+
 export const uploadAsset = async (server: Server, data: any) => {
   const {
     assetTitle,
@@ -29,6 +31,8 @@ export const uploadAsset = async (server: Server, data: any) => {
     assetDescription: assetDescription,
     assetPrice: assetPrice,
   };
+
+  console.log("assetData", cypherStringified, metadata);
 
   try {
     let result = { isErr: "saddsa", res: { id: "" } };

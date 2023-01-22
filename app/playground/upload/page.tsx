@@ -40,12 +40,7 @@ export default function Upload() {
     try {
       setError("");
       setLoading(true);
-      const res = await uploadAsset(SERVER, payLoad);
-
-      if (res) {
-        setResponse(res.data);
-        formRef.current!.reset();
-      }
+      await uploadAsset(SERVER, payLoad);
     } catch (e) {
       console.error(e);
       setError((e as Error).message);
