@@ -1,11 +1,10 @@
 "use client";
-import { useState, useRef, Fragment } from "react";
+import { useState, useRef } from "react";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { Title } from "@components/title";
 import { ErrorMessage } from "@components/error";
-import { login } from "web3/auth";
-
 import { Server } from "stellar-sdk";
+import { uploadAsset } from "web3/assets";
 const SERVER = new Server("https://horizon-testnet.stellar.org");
 
 export default function Upload() {
@@ -31,14 +30,20 @@ export default function Upload() {
   const onSubmit = async (event: any) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const payLoad: any = {};
+    data.forEach((val, key) => {
+      payLoad[key] = val;
+    });
+
+    payLoad.file = file;
 
     try {
       setError("");
       setLoading(true);
+      const res = await uploadAsset(SERVER, payLoad);
 
-      const res = await login(SERVER, data.get("publicKey")?.toString() ?? "");
-      setResponse(res);
       if (res) {
+        setResponse(res.data);
         formRef.current!.reset();
       }
     } catch (e) {
@@ -102,33 +107,19 @@ export default function Upload() {
             className="w-full p-0 text-base bg-transparent border-0 appearance-none text-zinc-100 placeholder-zinc-500 focus:ring-0 sm:text-sm"
           />
         </div>
+
         <div className="px-3 py-2 mt-8 border rounded border-zinc-600 focus-within:border-zinc-100/80 focus-within:ring-0">
           <label
-            htmlFor="publicKey"
-            className="block text-xs font-medium text-zinc-100"
-          >
-            PUBLIC KEY
-          </label>
-          <input
-            type="text"
-            name="publicKey"
-            required
-            id="publicKey"
-            className="w-full p-0 text-base bg-transparent border-0 appearance-none text-zinc-100 placeholder-zinc-500 focus:ring-0 sm:text-sm"
-          />
-        </div>
-        <div className="px-3 py-2 mt-8 border rounded border-zinc-600 focus-within:border-zinc-100/80 focus-within:ring-0">
-          <label
-            htmlFor="secretKey"
+            htmlFor="fromSecretKey"
             className="block text-xs font-medium text-zinc-100"
           >
             SECRET KEY
           </label>
           <input
             type="password"
-            name="secretKey"
+            name="fromSecretKey"
             required
-            id="secretKey"
+            id="fromSecretKey"
             className="w-full p-0 text-base bg-transparent border-0 appearance-none text-zinc-100 placeholder-zinc-500 focus:ring-0 sm:text-sm"
           />
         </div>

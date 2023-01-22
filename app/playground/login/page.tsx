@@ -1,12 +1,11 @@
 "use client";
-import { useState, Fragment, useRef } from "react";
+import { useState, useRef } from "react";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { Title } from "@components/title";
 import { ErrorMessage } from "@components/error";
-import { createAccount, login } from "web3/auth";
-import { StellarKeypair } from "lib/Types/Types";
+import { login } from "web3/auth";
 
-import { Keypair, Server } from "stellar-sdk";
+import { Server } from "stellar-sdk";
 
 const SERVER = new Server("https://horizon-testnet.stellar.org");
 
