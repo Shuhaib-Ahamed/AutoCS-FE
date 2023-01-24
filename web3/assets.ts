@@ -1,48 +1,21 @@
 import StellarSdk, { Server } from "stellar-sdk";
-import { generateHash, symmetricEncryption } from "utils/encryptor";
 import { NETWORKS } from "lib/Types/Networks";
+import { createAsset } from "./utils";
 
 //Big chain
 
-export const uploadAsset = async (server: Server, data: any) => {
-  const {
-    assetTitle,
-    assetPrice,
-    assetDescription,
-    file,
-    fromSecretKey,
-    assetKeyPair,
-  } = data;
-
-  const assetdata = {
-    model: {
-      asset_type: "digital_asset",
-      asset_issuer: "AutoCS platform",
-      encrypted_model: "",
-    },
-  };
-
-  let cypher = symmetricEncryption(JSON.stringify(file), fromSecretKey);
-  let cypherStringified = cypher.toString();
-  assetdata.model.encrypted_model = cypherStringified;
-
-  const metadata = {
-    assetTitle: assetTitle,
-    assetDescription: assetDescription,
-    assetPrice: assetPrice,
-  };
-
-  console.log("assetData", cypherStringified, metadata);
-
+export const uploadAsset = async (server: Server, data: FormData) => {
   try {
-    let result = { isErr: "saddsa", res: { id: "" } };
+    const result = await createAsset(data);
+    const fromSecret = data.get("fromSecretKey");
 
-    if (result.isErr) {
+    if (result.data.error) {
       return { message: "Bigchain DB error when uploading asset!" };
     }
     // Next, you'll need to load the account that you want to add data to
-    const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
+    const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecret);
     const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+
     // Then, you can create a transaction to add data to the account
     var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       //define the base fee
@@ -51,15 +24,8 @@ export const uploadAsset = async (server: Server, data: any) => {
     })
       .addOperation(
         StellarSdk.Operation.manageData({
-          name: metadata.assetTitle,
-          value: generateHash(
-            JSON.stringify({
-              assetDescription: metadata.assetDescription,
-              assetID: result?.res.id,
-              assetKeyPair: assetKeyPair,
-              assetPrice: metadata.assetPrice,
-            })
-          ),
+          name: result.data.metadata.assetTitle,
+          value: result.assetHash,
         })
       )
       .setTimeout(30)
@@ -68,11 +34,14 @@ export const uploadAsset = async (server: Server, data: any) => {
     transaction.sign(sourceKeypair);
     // Finally, submit the transaction to the network
     const stellarSubmit = await server.submitTransaction(transaction);
+
+    console.log("Stellar", stellarSubmit);
     return {
       message: "Upload successfull",
       data: stellarSubmit,
     };
   } catch (error) {
+    console.log(error);
     return {
       message:
         "Stellar or MongoDb error when creating transaction on the asset!",

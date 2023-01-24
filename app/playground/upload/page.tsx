@@ -10,7 +10,7 @@ const SERVER = new Server("https://horizon-testnet.stellar.org");
 export default function Upload() {
   const formRef = useRef<HTMLFormElement>(null);
   const [copied, setCopied] = useState<Boolean>(false);
-  const [file, setFile] = useState<File>();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [response, setResponse] = useState<any | null>();
@@ -29,24 +29,59 @@ export default function Upload() {
 
   const onSubmit = async (event: any) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const payLoad: any = {};
-    data.forEach((val, key) => {
-      payLoad[key] = val;
-    });
 
-    payLoad.file = file;
+    const form = new FormData();
+    form.append("file", "S:\\IIT\\FYP\\Implementation\\test.csv");
+    form.append(
+      "toPublicKey",
+      "GDFFEKBA6ZCRNYPIN3RPO65MITASGMOX6KUDAGWCMPVKNTJHKVUUPHRB"
+    );
+    form.append(
+      "fromSecretKey",
+      "SCYM5O2VATGQMZ7W75W5C5GDKMUVNIIEE5SJRVNF5QQHLU3YNYVM4ALS"
+    );
+    form.append("assetTitle", "Asset#2");
+    form.append("assetDescription", "Asset Two");
+    form.append("assetPrice", "200");
 
-    try {
-      setError("");
-      setLoading(true);
-      await uploadAsset(SERVER, payLoad);
-    } catch (e) {
-      console.error(e);
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
+    const options = {
+      method: "POST",
+      headers: {
+        "Content-Type": "multipart/form-data",
+        Authorization:
+          "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYzYzM3ZDdmZWRjN2M4ZGQxMjRhYTIyMCIsInB1YmxpY0tleSI6IkdBSUdCMkI0TEtVWENGRkVNQ0FSV0Y2WUM3RUdTTVZQUVdKUEVTVERENzdOUDRSQkJPTVhSMkhCIiwicm9sZSI6IkJVWUVSIiwiaWF0IjoxNjczOTQ3NDk0LCJleHAiOjE2NzQwMzM4OTR9.iUjx0XrQsWugIlVK3xRWuXF6W7pItANHvcKRBuSVSmU",
+      },
+      body: {},
+    };
+
+    options.body = form;
+
+    fetch("http://localhost:9000/api/v1/chain/upload", options)
+      .then((response) => response.json())
+      .then((response) => console.log(response))
+      .catch((err) => console.error(err));
+
+    // if (!selectedFile) {
+    //   return setError("Please Upload a dataset!");
+    // }
+    // setLoading(true);
+    // setError("");
+    // const formData = new FormData(event.currentTarget);
+    // formData.append("file", selectedFile);
+    // try {
+    //   const result = await uploadAsset(SERVER, formData);
+
+    //   console.log("result", result);
+    //   if (!result) {
+    //     setError("Error!!!!");
+    //   }
+    //   return setResponse(result.data);
+    // } catch (e) {
+    //   console.error(e);
+    //   setError((e as Error).message);
+    // } finally {
+    //   setLoading(false);
+    // }
   };
 
   return (
@@ -121,17 +156,18 @@ export default function Upload() {
         <div className="mt-8 w-full">
           <label
             className="flex items-center justify-center h-16 px-3 py-2 text-sm whitespace-no-wrap duration-150 border rounded hover:border-zinc-100/80 border-zinc-600 focus:border-zinc-100/80 focus:ring-0 text-zinc-100 hover:text-white hover:cursor-pointer "
-            htmlFor="file_input"
+            htmlFor="file"
           >
-            {file ? <span>Uploaded</span> : "Upload an Asset"}
+            {selectedFile ? <span>Uploaded</span> : "Upload an Asset"}
           </label>
           <input
             className="hidden"
-            id="file_input"
             type="file"
+            name="file"
+            id="file"
             onChange={(e) => {
-              const file = e.target.files![0];
-              setFile(file);
+              const selectedFile = e.target.files![0];
+              setSelectedFile(selectedFile);
             }}
           />
         </div>

@@ -6,7 +6,7 @@ export const generateSalt = async (): Promise<string> => {
   return crypto.randomBytes(128).toString("base64");
 };
 
-export const asymmetricEncryption =  (
+export const asymmetricEncryption = (
   field: any,
   toPublicKey: string,
   fromSecretKey: string
@@ -20,7 +20,7 @@ export const asymmetricEncryption =  (
   return response;
 };
 
-export const asymmetricDecryption =  (
+export const asymmetricDecryption = (
   encryptionObject: EncryptionObject,
   toSecretKey: string
 ) => {
@@ -29,14 +29,13 @@ export const asymmetricDecryption =  (
   return response;
 };
 
-export const symmetricEncryption =  (
-  field: string,
-  fromSecretKey: string
-) => {
+export const symmetricEncryption = (field: string, fromSecretKey: string) => {
   const response = NIFTRON.utils.symmetricEncryption.encrypt(
     field,
     fromSecretKey
   );
+
+  console.log("cypherText Encryption", response);
   return response;
 };
 
@@ -48,9 +47,10 @@ export const symmetricDecryption = (
     encryptedField,
     fromSecretKey
   );
+  console.log("cypherText Decryption ", response);
   return response;
 };
 
-export const generateHash = async (value: string) => {
+export const generateHash = (value: string) => {
   return crypto.createHash("sha256").update(value).digest("hex");
 };
