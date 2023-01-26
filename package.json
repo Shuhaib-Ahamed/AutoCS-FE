@@ -49,6 +49,7 @@
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
+    "rsa-proxy-reencrypt": "^0.0.2",
     "shamirs-secret-sharing": "^1.0.1",
     "stellar-sdk": "^10.4.0",
     "tweetnacl": "^1.0.3",

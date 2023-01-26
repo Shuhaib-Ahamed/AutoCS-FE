@@ -9,3 +9,9 @@ export const STATE = {
   OWNED: "OWNED",
   TRANSFERD: "TRANSFERED",
 };
+
+export const REQUEST_STATUS = {
+  INREVIEW: "INREVIEW",
+  GRANTED: "GRANTED",
+  REJECTED: "REJECTED",
+};

@@ -54,4 +54,24 @@ export default {
       return next(error);
     }
   },
+
+
+  sendAssetRequest: async (req, res, next) => {
+    try {
+      const result = await chainService.sendAssetRequest(req.body);
+      success(res, 201, result);
+    } catch (error) {
+      return next(error);
+    }
+  },
+
+  acceptAssetRequest: async (req, res, next) => {
+    try {
+      const result = await chainService.acceptAssetRequest(req.body);
+      success(res, 201, result);
+    } catch (error) {
+      return next(error);
+    }
+  },
+  
 };

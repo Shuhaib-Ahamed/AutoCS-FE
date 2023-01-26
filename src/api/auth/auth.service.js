@@ -54,6 +54,7 @@ export default {
         username: user.username,
         account: { ...accountArray, account },
       };
+      
       return {
         token: user.generateJWT(),
         user: userData,
