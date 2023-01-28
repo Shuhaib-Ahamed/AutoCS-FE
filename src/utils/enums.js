@@ -15,3 +15,10 @@ export const REQUEST_STATUS = {
   GRANTED: "GRANTED",
   REJECTED: "REJECTED",
 };
+
+
+
+export const ENCRYPTION = {
+  AES: "AES",
+  RSA: "RSA",
+};

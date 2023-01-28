@@ -304,6 +304,22 @@ export default {
     let cypherStringified = cypher.encryptedData;
     assetResponse.asset = cypherStringified;
 
+    const reEncryptAssetData =  encryptor.asymmetricEncryption(
+      decryptedAsset,
+      toPublicKey,
+      fromSecretKey
+    );
+
+    await Asset.findByIdAndUpdate(
+      assetObjectID,
+      {
+        $set: {
+          assetData: JSON.stringify(reEncryptAssetData),
+        },
+      },
+      { new: true }
+    );
+
     await Requests.findByIdAndUpdate(
       requestID,
       {

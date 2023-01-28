@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { STATE } from "../../utils/enums.js";
+import { ENCRYPTION, REQUEST_STATUS, STATE } from "../../utils/enums.js";
 
 const assetSchema = mongoose.Schema(
   {
@@ -21,6 +21,12 @@ const assetSchema = mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    encryptionType: {
+      type: String,
+      enum: ENCRYPTION,
+      default: ENCRYPTION.AES,
+      required: true,
     },
   },
   {
