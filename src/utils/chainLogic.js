@@ -12,6 +12,9 @@ const chainConnection = new BigchainDB.Connection(API_PATH);
 const getKeypairFromChain = new BigchainDB.Ed25519Keypair();
 
 let ChainFunctions = {
+  //createSimpleAsset: creates and posts a new asset transaction on the blockchain,
+  //using the provided keypair, asset data, and metadata.
+
   createSimpleAsset: async (keypair, asset, metadata) => {
     const txSimpleAsset = BigchainDB.Transaction.makeCreateTransaction(
       asset,
@@ -92,50 +95,48 @@ let ChainFunctions = {
     result.res = assetObj;
     return result;
   },
-  transferAsset: async (
-    fetchedAsset,
-    senderKeypair,
-    metaData,
-    issureKeyPair
-  ) => {
-    let assetObj = null;
-    let result = { isErr: false, res: assetObj };
 
-    if (fetchedAsset) {
-      //Transfer the Asset
-      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
-        // signedTx to transfer and output index
-        [{ tx: fetchedAsset, output_index: 0 }],
-        [
-          BigchainDB.Transaction.makeOutput(
-            BigchainDB.Transaction.makeEd25519Condition(senderKeypair.publicKey)
-          ),
-        ],
-        // metadata
+  //Tranfer Asset
+  transferAsset: async function transferAsset(
+    txId,
+    keypairTo,
+    metaData,
+    keypairFrom
+  ) {
+    try {
+      console.log(
+        "🚀 ~ file: chainLogic.js:106 ~   ",
+        txId,
+        keypairFrom,
+        keypairTo,
         metaData
       );
 
-      // Sign the transaction with private keys
-      const txSigned = BigchainDB.Transaction.signTransaction(
-        txTransfer,
-        issureKeyPair.privateKey
+      const tx = await chainConnection.getTransaction(txId);
+      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
+        [{ tx, output_index: 0 }],
+        [
+          BigchainDB.Transaction.makeOutput(
+            BigchainDB.Transaction.makeEd25519Condition(keypairTo.publicKey)
+          ),
+        ],
+        metaData
       );
 
-      try {
-        assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
-      } catch (err) {
-        result.isErr = true;
-        return result;
-      }
+      const txTransferSigned = BigchainDB.Transaction.signTransaction(
+        txTransfer,
+        keypairFrom.privateKey
+      );
+      // send it off to BigchainDB
+      await chainConnection.postTransaction(txTransferSigned);
 
-      result.isErr = false;
-      result.res = assetObj;
-      return result;
+      return chainConnection;
+    } catch (err) {
+      throw err;
     }
   },
 
   upload: async (data, stellarServer) => {
-    console.log("🚀 ~ file: chainLogic.js:132 ~ upload: ~ data", data);
     const fromSecretKey = data.fromSecretKey;
     const fromPublicKey = data.fromPublicKey;
     const metadata = data.assetData;

@@ -16,8 +16,6 @@ export const REQUEST_STATUS = {
   REJECTED: "REJECTED",
 };
 
-
-
 export const ENCRYPTION = {
   AES: "AES",
   RSA: "RSA",

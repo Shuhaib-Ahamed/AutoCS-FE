@@ -18,9 +18,11 @@ const assetSchema = mongoose.Schema(
       type: String,
       required: "Asset Data is required",
     },
-    isVerified: {
-      type: Boolean,
-      default: false,
+    status: {
+      type: String,
+      enum: STATE,
+      default: STATE.OWNED,
+      required: true,
     },
     encryptionType: {
       type: String,

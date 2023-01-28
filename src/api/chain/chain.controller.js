@@ -29,6 +29,7 @@ export default {
       return next(error);
     }
   },
+  
   searchAssetById: async (req, res, next) => {
     try {
       const result = await chainService.searchAssetById(req.body);
@@ -37,6 +38,7 @@ export default {
       return next(error);
     }
   },
+
   searchAssetByMetadata: async (req, res, next) => {
     try {
       const result = await chainService.searchAssetByMetadata(req.body);

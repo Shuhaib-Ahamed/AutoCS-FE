@@ -6,7 +6,7 @@ import { NETWORKS } from "../../utils/networks.js";
 import Asset from "../models/asset.model.js";
 import Requests from "../models/requests.model.js";
 import User from "../models/user.model.js";
-import { REQUEST_STATUS, STATE } from "../../utils/enums.js";
+import { ENCRYPTION, REQUEST_STATUS, STATE } from "../../utils/enums.js";
 import { v4 as uuidv4 } from "uuid";
 
 //Stellar
@@ -128,15 +128,25 @@ export default {
   },
 
   decryptAssetObject: async (body) => {
-    const { key, fromSecretKey } = body;
-    const encryptionObject = encryptor.symmetricDecryption(key, fromSecretKey);
+    var decryptedResult;
+    const { key, fromSecretKey, type } = body;
+    if (type === ENCRYPTION.AES) {
+      decryptedResult = encryptor.symmetricDecryption(key, fromSecretKey);
+    } else if (type === ENCRYPTION.RSA) {
+      const encyptionObject = JSON.parse(key);
 
-    console.log("dsad", encryptionObject);
+      decryptedResult = encryptor.asymmetricDecryption(
+        encyptionObject,
+        fromSecretKey
+      );
+    } else {
+      return { message: "Please provide encryption type!!!" };
+    }
 
     let response = "";
     const regex = /^[\],:{}\s]*$/;
     const isJSON = regex.test(
-      encryptionObject
+      decryptedResult
         .replace(/\\["\\\/bfnrtu]/g, "@")
         .replace(
           /"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g,
@@ -145,9 +155,9 @@ export default {
         .replace(/(?:^|:|,)(?:\s*\[)+/g, "")
     );
     if (isJSON) {
-      response = JSON.parse(encryptionObject);
+      response = JSON.parse(decryptedResult);
     } else {
-      response = encryptionObject;
+      response = decryptedResult;
     }
 
     return response;
@@ -265,6 +275,10 @@ export default {
       return { message: "Asset not found!!!" };
     }
 
+    if (response.status === STATE.TRANSFERD) {
+      return { message: "Asset already transfered!!!" };
+    }
+
     const decryptedAsset = encryptor.symmetricDecryption(
       response.assetData,
       fromSecretKey
@@ -304,7 +318,7 @@ export default {
     let cypherStringified = cypher.encryptedData;
     assetResponse.asset = cypherStringified;
 
-    const reEncryptAssetData =  encryptor.asymmetricEncryption(
+    const reEncryptAssetData = encryptor.asymmetricEncryption(
       decryptedAsset,
       toPublicKey,
       fromSecretKey
@@ -315,6 +329,8 @@ export default {
       {
         $set: {
           assetData: JSON.stringify(reEncryptAssetData),
+          encryptionType: ENCRYPTION.RSA,
+          status: STATE.TRANSFERD,
         },
       },
       { new: true }
@@ -338,19 +354,24 @@ export default {
   },
 
   //Buyer
-  transferAsset: async (req, res) => {
-    let { asset, issureKeyPair, fromSecretKey, toPublicKey, metadata } = req;
+  transferAsset: async (data) => {
+    let {
+      fromPublicKey,
+      fromSecretKey,
+      toPublicKey,
+      metadata,
+      encryptionObject,
+      assetObjectID,
+    } = data;
     const senderKeyPair = getKeypairFromChain;
-
-    const { encryptedData, ...encryptionObject } = cypher;
 
     try {
       //txId, keypairTo, metaData, keypairFrom;
       var result = await ChainFunctions.transferAsset(
-        asset,
+        encryptionObject.assetID,
         senderKeyPair,
         metadata,
-        issureKeyPair
+        encryptionObject.assetKeyPair
       );
 
       if (result.isErr) {
@@ -358,30 +379,23 @@ export default {
       }
 
       // Next, you'll need to load the account that you want to transfer data to
-      const destinationAccount = await stellarServer.loadAccount(toPublicKey);
+      const sourceAccount = await stellarServer.loadAccount(fromPublicKey);
 
       // Then, you can create a transaction to add data to the account
-      var transaction = new StellarSdk.TransactionBuilder(destinationAccount, {
+      var buyerTransaction = new StellarSdk.TransactionBuilder(sourceAccount, {
         //define the base fee
         fee: 100,
         networkPassphrase: NETWORKS.TESTNET,
       })
-        .TransactionBuilder(destinationAccount)
-        .addOperation(
-          StellarSdk.Operation.payment({
-            destination: toPublicKey,
-            asset: StellarSdk.Asset.native(),
-            amount: metadata.assetPrice, // deduct the asset price from the destination account
-          })
-        )
         .addOperation(
           StellarSdk.Operation.manageData({
-            name: metadata.assetTitle,
+            name: result.metadata.assetTitle,
             value: encryptor.generateHash(
               JSON.stringify({
-                assetID: cypher,
-                assetKeyPair: senderKeyPair,
-                encryptionObject: encryptionObject,
+                assetDescription: metadata.assetDescription,
+                assetID: encryptionObject.assetID,
+                assetKeyPair: encryptionObject.assetKeyPair,
+                assetPrice: result.metadata.assetPrice,
               })
             ),
           })
@@ -390,34 +404,75 @@ export default {
         .build();
 
       // Sign the transaction with the account's secret key
-      transaction.sign(senderKeyPair);
+      buyerTransaction.sign(fromSecretKey);
 
-      //save object in mongoDB
-      const assetObject = {
-        publicKey: toPublicKey,
-        assetTitle: assetResponse.metadata.assetTitle,
-        assetData: encryptor.symmetricEncryption(
-          JSON.stringify({
-            assetID: cypher,
-            assetKeyPair: senderKeyPair,
-            encryptionObject: encryptionObject,
-          }),
-          fromSecretKey
-        ),
-      };
-      await new Asset({ ...assetObject }).save();
+      // Next, you'll need to load the account that you want to transfer data to
+      const destinationAccount = await stellarServer.loadAccount(toPublicKey);
+
+      // Then, you can create a transaction to add data to the account
+      var sellerTransaction = new StellarSdk.TransactionBuilder(
+        destinationAccount,
+        {
+          //define the base fee
+          fee: 100,
+          networkPassphrase: NETWORKS.TESTNET,
+        }
+      )
+        .TransactionBuilder(destinationAccount)
+        .addOperation(
+          StellarSdk.Operation.payment({
+            destination: toPublicKey,
+            asset: StellarSdk.Asset.native(),
+            amount: result.metadata.assetPrice, // deduct the asset price from the destination account
+          })
+        )
+        .setTimeout(30)
+        .build();
+
+      // Sign the transaction with the account's secret key
+      sellerTransaction.sign(fromSecretKey);
+
+      const encryptedAssetData = encryptor.symmetricEncryption(
+        JSON.stringify({
+          assetDescription: metadata.assetDescription,
+          assetID: encryptionObject.assetID,
+          assetKeyPair: senderKeyPair,
+          assetPrice: result.metadata.assetPrice,
+        }),
+        fromSecretKey
+      );
+
+      await Asset.findByIdAndUpdate(
+        assetObjectID,
+        {
+          $set: {
+            publicKey: fromPublicKey,
+            status: STATE.OWNED,
+            assetData: encryptedAssetData,
+          },
+        },
+        {
+          new: true,
+        }
+      );
 
       // Finally, submit the transaction to the network
-      const stellarSubmit = await stellarServer.submitTransaction(transaction);
+      const sellerSubmit = await stellarServer.submitTransaction(
+        sellerTransaction
+      );
+      // Finally, submit the transaction to the network
+      const buyerSubmit = await stellarServer.submitTransaction(
+        buyerTransaction
+      );
       return {
         message: "Transfer successfull",
-        data: stellarSubmit,
+        data: {
+          ...buyerSubmit,
+          ...sellerSubmit,
+        },
       };
     } catch (error) {
       console.log(error);
     }
-    const response = { ...senderKeyPair, ...result };
-
-    return { message: "Transfer successfull!!", response };
   },
 };
