@@ -6,7 +6,8 @@ import { NETWORKS } from "../../utils/networks.js";
 import Asset from "../models/asset.model.js";
 import Requests from "../models/requests.model.js";
 import User from "../models/user.model.js";
-import { REQUEST_STATUS } from "../../utils/enums.js";
+import { REQUEST_STATUS, STATE } from "../../utils/enums.js";
+import { v4 as uuidv4 } from "uuid";
 
 //Stellar
 const stellarServer = new StellarSdk.Server(
@@ -48,6 +49,7 @@ export default {
     }
 
     //delete privateKey and publicKey and add encryptionData
+    metadata.assetTitle = `${metadata.assetTitle} - ${uuidv4()}`;
     delete metadata.fromSecretKey;
 
     try {
@@ -75,6 +77,7 @@ export default {
         publicKey: toPublicKey,
         assetTitle: metadata.assetTitle,
         assetData: cypherText,
+        isVerified: true,
       };
       await new Asset({ ...assetObject }).save();
 
@@ -219,20 +222,20 @@ export default {
         return { message: "User or Asset dose not exist!" };
       }
 
-      users.forEach(async (user, index) => {
-        const notificationArr = user.notifications;
-        notificationArr.push({ ...body });
+      // users.forEach(async (user, index) => {
+      //   const notificationArr = user.notifications;
+      //   notificationArr.push({ ...body });
 
-        await User.findOneAndUpdate(
-          { publicKey: publicKeys[index] },
-          {
-            $set: {
-              notifications: notificationArr,
-            },
-          },
-          { new: true }
-        );
-      });
+      //   await User.findOneAndUpdate(
+      //     { publicKey: publicKeys[index] },
+      //     {
+      //       $set: {
+      //         notifications: notificationArr,
+      //       },
+      //     },
+      //     { new: true }
+      //   );
+      // });
 
       //save object in mongo
       const response = await new Requests({ ...body }).save();
@@ -247,11 +250,16 @@ export default {
 
   //Seller
   acceptAssetRequest: async (body) => {
-    let { assetObjectID, fromSecretKey, toPublicKey } = body;
+    let {
+      assetObjectID,
+      fromSecretKey,
+      toPublicKey,
+      fromPublicKey,
+      assetData,
+      requestID,
+    } = body;
 
     const response = await Asset.findOne({ _id: assetObjectID });
-
-    console.log(response);
 
     if (!response) {
       return { message: "Asset not found!!!" };
@@ -262,12 +270,30 @@ export default {
       fromSecretKey
     );
 
-    const { assetID } = decryptedAsset;
+    const { assetID } = JSON.parse(decryptedAsset);
 
     let assetResponse = await ChainFunctions.searchAndDecryptAsset({
       assetID,
       fromSecretKey,
     });
+
+    //Upload Asset
+
+    let uploadAsset = await ChainFunctions.upload(
+      {
+        fromSecretKey: fromSecretKey,
+        fromPublicKey: fromPublicKey,
+        asset: assetResponse.asset,
+        assetData: assetData,
+      },
+      stellarServer
+    );
+
+    if (!uploadAsset.data) {
+      return {
+        message: "Failed to upload asset!!!",
+      };
+    }
 
     let cypher = encryptor.asymmetricEncryption(
       JSON.stringify(assetResponse.asset),
@@ -278,7 +304,21 @@ export default {
     let cypherStringified = cypher.encryptedData;
     assetResponse.asset = cypherStringified;
 
-    return { message: "Request Accepted!", data: assetResponse };
+    await Requests.findByIdAndUpdate(
+      requestID,
+      {
+        $set: {
+          status: REQUEST_STATUS.GRANTED,
+        },
+      },
+      { new: true }
+    );
+
+    return {
+      message: "Request Accepted!",
+      data: assetResponse,
+      uploadedAsset: uploadAsset,
+    };
   },
 
   //Buyer
@@ -334,7 +374,7 @@ export default {
         .build();
 
       // Sign the transaction with the account's secret key
-      transaction.sign(sourceKeypair);
+      transaction.sign(senderKeyPair);
 
       //save object in mongoDB
       const assetObject = {
