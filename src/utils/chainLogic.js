@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { NETWORKS } from "./networks.js";
 import StellarSdk from "stellar-sdk";
 import Asset from "../api/models/asset.model.js";
+import { ENCRYPTION, STATE } from "./enums.js";
 
 //Big chain
 const API_PATH = process.env.BIG_CHAIN_NET;
@@ -58,8 +59,6 @@ let ChainFunctions = {
       const encModel = foundAsset.res.asset.data.model.encrypted_model;
 
       decryptedFile = encryptor.symmetricDecryption(encModel, fromSecretKey);
-
-      foundAsset.res.asset = JSON.parse(decryptedFile);
     }
     return foundAsset.res;
   },
@@ -96,51 +95,53 @@ let ChainFunctions = {
     return result;
   },
 
-  //Tranfer Asset
-  transferAsset: async function transferAsset(
-    txId,
-    keypairTo,
-    metaData,
-    keypairFrom
-  ) {
-    try {
-      console.log(
-        "🚀 ~ file: chainLogic.js:106 ~   ",
-        txId,
-        keypairFrom,
-        keypairTo,
-        metaData
-      );
+  transferAsset: async (fetchAsset, keypairTo, metaData, keypairFrom) => {
+    let assetObj = null;
+    let result = { isErr: false, res: assetObj };
 
-      const tx = await chainConnection.getTransaction(txId);
+    if (fetchAsset) {
+      //Transfer the Asset
       const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
-        [{ tx, output_index: 0 }],
+        // signedTx to transfer and output index
+        [{ tx: fetchAsset, output_index: 0 }],
         [
           BigchainDB.Transaction.makeOutput(
             BigchainDB.Transaction.makeEd25519Condition(keypairTo.publicKey)
           ),
         ],
+        // metadata
         metaData
       );
 
-      const txTransferSigned = BigchainDB.Transaction.signTransaction(
+      // Sign the transaction with private keys
+      const txSigned = BigchainDB.Transaction.signTransaction(
         txTransfer,
         keypairFrom.privateKey
       );
-      // send it off to BigchainDB
-      await chainConnection.postTransaction(txTransferSigned);
 
-      return chainConnection;
-    } catch (err) {
-      throw err;
+      try {
+        assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
+      } catch (err) {
+        result.isErr = true;
+        return result;
+      }
+
+      result.isErr = false;
+      result.res = assetObj;
+      return result;
     }
   },
 
   upload: async (data, stellarServer) => {
-    const fromSecretKey = data.fromSecretKey;
-    const fromPublicKey = data.fromPublicKey;
-    const metadata = data.assetData;
-    const uploadedFile = data.asset;
+    const { fromSecretKey, fromPublicKey, toPublicKey, metadata, asset, type } =
+      data;
+    console.log("🚀 ~ file: chainLogic.js:281 ~ upload: ~ data", data);
+
+    //inntialize
+    let cypher;
+    let cypherAsset;
+    let cypherText;
+    let stellarHash;
 
     const assetKeyPair = getKeypairFromChain;
 
@@ -151,13 +152,18 @@ let ChainFunctions = {
       },
     };
 
-    let cypher = encryptor.symmetricEncryption(
-      JSON.stringify(uploadedFile),
-      fromSecretKey
-    );
-
-    let cypherStringified = cypher.toString();
-    assetdata.model.encrypted_model = cypherStringified;
+    if (type === ENCRYPTION.AES) {
+      cypher = encryptor.symmetricEncryption(asset, fromSecretKey);
+      assetdata.model.encrypted_model = cypher;
+    } else if (type === ENCRYPTION.RSA) {
+      cypher = encryptor.asymmetricEncryption(
+        asset,
+        toPublicKey,
+        fromSecretKey
+      );
+      cypherAsset = cypher.encryptedData;
+      assetdata.model.encrypted_model = cypherAsset;
+    } else return { message: "Please provide encryption type!!!" };
 
     //delete privateKey and publicKey and add encryptionData
     metadata.assetTitle = `${metadata.assetTitle} - ${uuidv4()}`;
@@ -173,23 +179,67 @@ let ChainFunctions = {
         return { message: "Bigchain DB error when uploading asset!" };
       }
 
-      const cypherText = encryptor.symmetricEncryption(
-        JSON.stringify({
-          assetDescription: metadata.assetDescription,
-          assetID: result.res.id,
-          assetKeyPair: assetKeyPair,
-          assetPrice: metadata.assetPrice,
-        }),
-        fromSecretKey
-      );
+      if (type === ENCRYPTION.AES) {
+        cypherText = encryptor.symmetricEncryption(
+          JSON.stringify({
+            assetDescription: metadata.assetDescription,
+            assetID: result.res.id,
+            assetKeyPair: assetKeyPair,
+            assetPrice: metadata.assetPrice,
+          }),
+          fromSecretKey
+        );
+      } else if (type === ENCRYPTION.RSA) {
+        //delete asset from the encryption object
+        delete cypher.encryptedData;
+        cypherText = encryptor.asymmetricEncryption(
+          JSON.stringify({
+            assetDescription: metadata.assetDescription,
+            assetID: result.res.id,
+            assetKeyPair: assetKeyPair,
+            assetPrice: metadata.assetPrice,
+            encryptioObject: cypher,
+          }),
+          toPublicKey,
+          fromSecretKey
+        );
+      } else return { message: "Please provide encryption type!!!" };
 
       const assetObject = {
         publicKey: fromPublicKey,
         assetTitle: metadata.assetTitle,
-        assetData: cypherText,
+        assetData:
+          type === ENCRYPTION.AES ? cypherText : JSON.stringify(cypherText),
+        isVerified: type === ENCRYPTION.AES ? true : false,
+        encryptionType:
+          type === ENCRYPTION.AES ? ENCRYPTION.AES : ENCRYPTION.RSA,
+        status: type === ENCRYPTION.AES ? STATE.OWNED : STATE.TRANSFERD,
       };
 
-      await new Asset({ ...assetObject }).save();
+      const newAsset = await new Asset({ ...assetObject }).save();
+
+      if (type === ENCRYPTION.AES) {
+        stellarHash = encryptor.generateHash(
+          JSON.stringify({
+            assetDescription: metadata.assetDescription,
+            assetID: result.res.id,
+            assetKeyPair: assetKeyPair,
+            assetPrice: metadata.assetPrice,
+          })
+        );
+      } else if (type === ENCRYPTION.RSA) {
+        stellarHash = encryptor.generateHash(
+          JSON.stringify({
+            assetDescription: metadata.assetDescription,
+            assetID: result.res.id,
+            assetKeyPair: assetKeyPair,
+            assetPrice: metadata.assetPrice,
+            encryptioObject: cypher,
+          })
+        );
+      } else return { message: "Please provide encryption type!!!" };
+
+      if (!stellarHash) return { message: "Couldn't find stellar hash!!!" };
 
       // Next, you'll need to load the account that you want to add data to
       const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
@@ -206,14 +256,7 @@ let ChainFunctions = {
         .addOperation(
           StellarSdk.Operation.manageData({
             name: metadata.assetTitle,
-            value: encryptor.generateHash(
-              JSON.stringify({
-                assetDescription: metadata.assetDescription,
-                assetID: result.res.id,
-                assetKeyPair: assetKeyPair,
-                assetPrice: metadata.assetPrice,
-              })
-            ),
+            value: stellarHash,
           })
         )
         .setTimeout(30)
@@ -226,7 +269,7 @@ let ChainFunctions = {
       const stellarSubmit = await stellarServer.submitTransaction(transaction);
       return {
         message: "Upload successfull",
-        data: stellarSubmit,
+        data: { stellar: stellarSubmit, asset: newAsset },
       };
     } catch (error) {
       console.log(error);

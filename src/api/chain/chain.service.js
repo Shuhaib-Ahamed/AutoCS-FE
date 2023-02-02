@@ -7,7 +7,6 @@ import Asset from "../models/asset.model.js";
 import Requests from "../models/requests.model.js";
 import User from "../models/user.model.js";
 import { ENCRYPTION, REQUEST_STATUS, STATE } from "../../utils/enums.js";
-import { v4 as uuidv4 } from "uuid";
 
 //Stellar
 const stellarServer = new StellarSdk.Server(
@@ -26,105 +25,23 @@ export default {
     const fromSecretKey = formData["fromSecretKey"];
     const toPublicKey = formData["toPublicKey"];
 
-    const assetKeyPair = getKeypairFromChain;
-
-    const assetdata = {
-      model: {
-        asset_type: "digital_asset",
-        asset_issuer: "AutoCS platform",
-      },
-    };
-
-    let cypher = encryptor.symmetricEncryption(
-      JSON.stringify(uploadedFile),
-      fromSecretKey
-    );
-
-    let cypherStringified = cypher.toString();
-    assetdata.model.encrypted_model = cypherStringified;
-
     let metadata = {};
     for (let key of Object.keys(formData)) {
       metadata[key] = formData[key];
     }
-
     //delete privateKey and publicKey and add encryptionData
-    metadata.assetTitle = `${metadata.assetTitle} - ${uuidv4()}`;
     delete metadata.fromSecretKey;
 
-    try {
-      let result = await ChainFunctions.createSimpleAsset(
-        assetKeyPair,
-        assetdata,
-        metadata
-      );
+    const uploadData = {
+      fromSecretKey: fromSecretKey,
+      fromPublicKey: toPublicKey,
+      toPublicKey: toPublicKey,
+      metadata: metadata,
+      uploadedFile: uploadedFile,
+      type: ENCRYPTION.AES,
+    };
 
-      if (result.isErr) {
-        return { message: "Bigchain DB error when uploading asset!" };
-      }
-
-      const cypherText = encryptor.symmetricEncryption(
-        JSON.stringify({
-          assetDescription: metadata.assetDescription,
-          assetID: result.res.id,
-          assetKeyPair: assetKeyPair,
-          assetPrice: metadata.assetPrice,
-        }),
-        fromSecretKey
-      );
-
-      const assetObject = {
-        publicKey: toPublicKey,
-        assetTitle: metadata.assetTitle,
-        assetData: cypherText,
-        isVerified: true,
-      };
-      await new Asset({ ...assetObject }).save();
-
-      // Next, you'll need to load the account that you want to add data to
-      const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
-      const sourceAccount = await stellarServer.loadAccount(
-        sourceKeypair.publicKey()
-      );
-
-      // Then, you can create a transaction to add data to the account
-      var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-        //define the base fee
-        fee: 100,
-        networkPassphrase: NETWORKS.TESTNET,
-      })
-        .addOperation(
-          StellarSdk.Operation.manageData({
-            name: metadata.assetTitle,
-            value: encryptor.generateHash(
-              JSON.stringify({
-                assetDescription: metadata.assetDescription,
-                assetID: result.res.id,
-                assetKeyPair: assetKeyPair,
-                assetPrice: metadata.assetPrice,
-              })
-            ),
-          })
-        )
-        .setTimeout(30)
-        .build();
-
-      // Sign the transaction with the account's secret key
-      transaction.sign(sourceKeypair);
-
-      // Finally, submit the transaction to the network
-      const stellarSubmit = await stellarServer.submitTransaction(transaction);
-      return {
-        message: "Upload successfull",
-        data: stellarSubmit,
-      };
-    } catch (error) {
-      console.log(error);
-      return {
-        message:
-          "Stellar or MongoDb error when creating transaction on the asset!",
-      };
-    }
+    return await ChainFunctions.upload(uploadData, stellarServer);
   },
 
   decryptAssetObject: async (body) => {
@@ -260,31 +177,28 @@ export default {
 
   //Seller
   acceptAssetRequest: async (body) => {
-    let {
-      assetObjectID,
-      fromSecretKey,
-      toPublicKey,
-      fromPublicKey,
-      assetData,
-      requestID,
-    } = body;
+    let { fromSecretKey, toPublicKey, fromPublicKey, requestID } = body;
 
-    const response = await Asset.findOne({ _id: assetObjectID });
+    const request = await Requests.findById(requestID);
+    if (!request) return { message: "Request not found!!!" };
 
-    if (!response) {
-      return { message: "Asset not found!!!" };
-    }
+    if (request.status === REQUEST_STATUS.GRANTED)
+      return { message: "Asset access already granted!!!" };
 
-    if (response.status === STATE.TRANSFERD) {
+    const response = await Asset.findOne({ _id: request?.assetObjectID });
+
+    if (!response) return { message: "Asset not found!!!" };
+
+    if (response.status === STATE.TRANSFERD)
       return { message: "Asset already transfered!!!" };
-    }
 
-    const decryptedAsset = encryptor.symmetricDecryption(
-      response.assetData,
+    //decrypt assetData
+    const decryptedAssetData = encryptor.symmetricDecryption(
+      response?.assetData,
       fromSecretKey
-    );
+    ); 
 
-    const { assetID } = JSON.parse(decryptedAsset);
+    const { assetID } = JSON.parse(decryptedAssetData);
 
     let assetResponse = await ChainFunctions.searchAndDecryptAsset({
       assetID,
@@ -292,55 +206,30 @@ export default {
     });
 
     //Upload Asset
-
     let uploadAsset = await ChainFunctions.upload(
       {
         fromSecretKey: fromSecretKey,
         fromPublicKey: fromPublicKey,
-        asset: assetResponse.asset,
-        assetData: assetData,
+        asset: assetResponse.asset.data.model.toString(),
+        metadata: JSON.parse(decryptedAssetData),
+        toPublicKey: toPublicKey,
+        type: ENCRYPTION.RSA,
       },
       stellarServer
     );
 
-    if (!uploadAsset.data) {
+    if (!uploadAsset.data.stellar) {
       return {
         message: "Failed to upload asset!!!",
       };
     }
-
-    let cypher = encryptor.asymmetricEncryption(
-      JSON.stringify(assetResponse.asset),
-      toPublicKey,
-      fromSecretKey
-    );
-
-    let cypherStringified = cypher.encryptedData;
-    assetResponse.asset = cypherStringified;
-
-    const reEncryptAssetData = encryptor.asymmetricEncryption(
-      decryptedAsset,
-      toPublicKey,
-      fromSecretKey
-    );
-
-    await Asset.findByIdAndUpdate(
-      assetObjectID,
-      {
-        $set: {
-          assetData: JSON.stringify(reEncryptAssetData),
-          encryptionType: ENCRYPTION.RSA,
-          status: STATE.TRANSFERD,
-        },
-      },
-      { new: true }
-    );
 
     await Requests.findByIdAndUpdate(
       requestID,
       {
         $set: {
           status: REQUEST_STATUS.GRANTED,
+          assetObjectID: uploadAsset.data.asset._id,
         },
       },
       { new: true }
@@ -349,32 +238,70 @@ export default {
     return {
       message: "Request Accepted!",
       data: assetResponse,
-      uploadedAsset: uploadAsset,
+      uploadedAsset: uploadAsset.data,
     };
   },
 
   //Buyer
   transferAsset: async (data) => {
-    let {
-      fromPublicKey,
-      fromSecretKey,
-      toPublicKey,
-      metadata,
-      encryptionObject,
-      assetObjectID,
-    } = data;
+    let { fromPublicKey, fromSecretKey, metadata, requestID } = data;
+
     const senderKeyPair = getKeypairFromChain;
 
+    const request = await Requests.findById(requestID);
+    if (!request) return { message: "Request not found!!!" };
+
+    if (request.status === REQUEST_STATUS.INREVIEW)
+      return { message: "Asset access in review!!!" };
+
+    const response = await Asset.findOne({ _id: request?.assetObjectID });
+
+    if (!response) return { message: "Asset not found!!!" };
+
+    if (response.status === STATE.OWNED)
+      return { message: "Asset is not transfered!!!" };
+
+    //decrypt assetData
+    const decryptedAssetData = encryptor.asymmetricDecryption(
+      JSON.parse(response?.assetData),
+      fromSecretKey
+    );
+
     try {
+      const { assetID, encryptioObject, assetKeyPair } =
+        JSON.parse(decryptedAssetData);
+      // Fetch the Asset by assetID or transactionId
+      let foundAsset = await ChainFunctions.searchAssetById(assetID);
+
+      if (foundAsset.res && !foundAsset.isErr) {
+        const encModel = foundAsset.res.asset.data.model.encrypted_model;
+
+        //apped the encrypted data in bigchain to the encryption object
+        encryptioObject.encryptedData = encModel;
+
+        //decrypt the asset object
+        const decryptedFile = encryptor.asymmetricDecryption(
+          encryptioObject,
+          fromSecretKey
+        );
+
+        //Reencrypt the file
+        const reEncryptFile = encryptor.symmetricEncryption(
+          decryptedFile,
+          fromSecretKey
+        );
+        foundAsset.res.asset.data.model.encrypted_model = reEncryptFile;
+      }
+
       //txId, keypairTo, metaData, keypairFrom;
-      var result = await ChainFunctions.transferAsset(
-        encryptionObject.assetID,
+      const result = await ChainFunctions.transferAsset(
+        foundAsset,
         senderKeyPair,
         metadata,
-        encryptionObject.assetKeyPair
+        assetKeyPair
       );
 
-      if (result.isErr) {
+      if (result.isErr || !result) {
         return { message: "Error when transfering asset!" };
       }
 
@@ -393,8 +320,8 @@ export default {
             value: encryptor.generateHash(
               JSON.stringify({
                 assetDescription: metadata.assetDescription,
-                assetID: encryptionObject.assetID,
-                assetKeyPair: encryptionObject.assetKeyPair,
+                assetID: assetData.assetID,
+                assetKeyPair: assetData.assetKeyPair,
                 assetPrice: result.metadata.assetPrice,
               })
             ),
@@ -435,7 +362,7 @@ export default {
       const encryptedAssetData = encryptor.symmetricEncryption(
         JSON.stringify({
           assetDescription: metadata.assetDescription,
-          assetID: encryptionObject.assetID,
+          assetID: assetData.assetID,
           assetKeyPair: senderKeyPair,
           assetPrice: result.metadata.assetPrice,
         }),
@@ -464,6 +391,7 @@ export default {
       const buyerSubmit = await stellarServer.submitTransaction(
         buyerTransaction
       );
+
       return {
         message: "Transfer successfull",
         data: {
@@ -476,3 +404,70 @@ export default {
     }
   },
 };
+
+//   transferAsset: async (req, res) => {
+//     let { assetID, issureKeyPair, fromSecretKey, toPublicKey, metadata } = req;
+//     const senderKeyPair = getKeypairFromChain;
+
+//     //Fetch the Asset by assetID or transactionId
+//     let assetResponse = await ChainFunctions.searchAndDecryptAsset({
+//       assetID,
+//       fromSecretKey,
+//     });
+
+//     let cypher = encryptor.asymmetricEncryption(
+//       JSON.stringify(assetResponse.asset),
+//       toPublicKey,
+//       fromSecretKey
+//     );
+
+//     let cypherStringified = cypher.encryptedData;
+//     assetResponse.asset = cypherStringified;
+
+//     const { encryptedData, ...encryptionObject } = cypher;
+
+//     try {
+//       //txId, keypairTo, metaData, keypairFrom;
+//       var result = await ChainFunctions.transferAsset(
+//         assetResponse,
+//         senderKeyPair,
+//         metadata,
+//         issureKeyPair
+//       );
+
+//       if (result.isErr) {
+//         return { message: "Error when transfering asset!" };
+//       }
+
+//       //data to be encrypted before sending to the blockchain
+//       let cypher = encryptor.symmetricEncryption(assetResponse.id, toPublicKey);
+
+//       //save object in mongoDB
+//       const assetObject = {
+//         publicKey: toPublicKey,
+//         assetID: cypher.toString(),
+//         assetTitle: assetResponse.metadata.assetTitle,
+//         assetDescription: assetResponse.metadata.assetDescription,
+//         assetKeyPair: encryptor.symmetricEncryption(
+//           JSON.stringify({
+//             senderKeyPair,
+//           }),
+//           toPublicKey
+//         ),
+//         encryptionObject: encryptor.symmetricEncryption(
+//           JSON.stringify({
+//             encryptionObject,
+//           }),
+//           toPublicKey
+//         ),
+//       };
+//       await new Asset({ ...assetObject }).save();
+//     } catch (error) {
+//       console.log(error);
+//     }
+
+//     const response = { ...senderKeyPair, ...result };
+
+//     return { message: "Transfer successfull!!", response };
+//   },
+// };
