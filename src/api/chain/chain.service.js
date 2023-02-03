@@ -239,6 +239,9 @@ export default {
     try {
       const senderKeyPair = getKeypairFromChain;
 
+      if (receiverComment.length > 28)
+        return { message: "Memo should be less than 28 characters" };
+
       const request = await Requests.findById(requestID);
       if (!request) return { message: "Request not found!!!" };
 
@@ -273,8 +276,6 @@ export default {
 
       if (!transferResult.retrieveTransaction)
         return { message: "Error when transfering asset!" };
-      if (receiverComment.length > 28)
-        return { message: "Memo should be less than 28 characters" };
 
       // Next, you'll need to load the account that you want to transfer data to
       const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
@@ -353,7 +354,7 @@ export default {
         message: "Transfer successfull",
         data: {
           stellar: stellarSubmit,
-          chain: transferResult.retrieveTransaction,
+          chain: transferResult,
         },
       };
     } catch (error) {

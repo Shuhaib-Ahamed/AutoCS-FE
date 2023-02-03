@@ -263,7 +263,6 @@ let ChainFunctions = {
   ) => {
     try {
       let tx = await chainConnection.getTransaction(txId);
-      console.log("🚀 ~ file: chainLogic.js:266 ~ tx", tx);
 
       if (!tx) return { message: "Asset not found!!!" };
 
@@ -308,7 +307,7 @@ let ChainFunctions = {
       return { retrieveTransaction: retrieveTransaction, tx: tx };
     } catch (err) {
       console.log(err);
-      throw err;
+      return { message: "Cannot tranfer asset!!!" };
     }
   },
 };
