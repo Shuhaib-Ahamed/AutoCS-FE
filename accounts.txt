@@ -28,3 +28,9 @@
 
 
 
+ENV{
+	PORT="9000"
+BIG_CHAIN_NET="https://test.ipdb.io/api/v1/"
+JWT_SECRET="OauthCentral"
+MONGO_URI=""
+}

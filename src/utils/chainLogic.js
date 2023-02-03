@@ -8,7 +8,6 @@ import { ENCRYPTION, STATE } from "./enums.js";
 
 //Big chain
 const API_PATH = process.env.BIG_CHAIN_NET;
-new BigchainDB.Connection(API_PATH);
 const chainConnection = new BigchainDB.Connection(API_PATH);
 const getKeypairFromChain = new BigchainDB.Ed25519Keypair();
 
@@ -41,6 +40,11 @@ let ChainFunctions = {
     try {
       assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
     } catch (err) {
+      console.log(
+        "🚀 ~ file: chainLogic.js:43 ~ createSimpleAsset: ~ err",
+        err
+      );
+
       result.isErr = true;
       return result;
     }
@@ -55,28 +59,15 @@ let ChainFunctions = {
     let foundAsset = await ChainFunctions.searchAssetById(assetID);
     let decryptedFile = null;
 
-    if (foundAsset.res && !foundAsset.isErr) {
-      const encModel = foundAsset.res.asset.data.model.encrypted_model;
-
+    if (foundAsset) {
+      const encModel = foundAsset.asset.data.model.encrypted_model;
       decryptedFile = encryptor.symmetricDecryption(encModel, fromSecretKey);
     }
-    return foundAsset.res;
+    return foundAsset;
   },
 
   searchAssetById: async (assetID) => {
-    let assetObj = null;
-    let result = { isErr: false, res: assetObj };
-
-    try {
-      assetObj = await chainConnection.getTransaction(assetID); //or USE: searchAssets OR pollStatusAndFetchTransaction
-    } catch (err) {
-      result.isErr = true;
-      return result;
-    }
-
-    result.isErr = false;
-    result.res = assetObj;
-    return result;
+    return await chainConnection.getTransaction(assetID);
   },
 
   searchAssetByMetadata: async (metadataKeyword) => {
@@ -95,55 +86,42 @@ let ChainFunctions = {
     return result;
   },
 
-  transferAsset: async (fetchAsset, keypairTo, metaData, keypairFrom) => {
-    let assetObj = null;
-    let result = { isErr: false, res: assetObj };
-
-    if (fetchAsset) {
-      //Transfer the Asset
-      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
-        // signedTx to transfer and output index
-        [{ tx: fetchAsset, output_index: 0 }],
-        [
-          BigchainDB.Transaction.makeOutput(
-            BigchainDB.Transaction.makeEd25519Condition(keypairTo.publicKey)
-          ),
-        ],
-        // metadata
-        metaData
-      );
-
-      // Sign the transaction with private keys
-      const txSigned = BigchainDB.Transaction.signTransaction(
-        txTransfer,
-        keypairFrom.privateKey
-      );
-
-      try {
-        assetObj = await chainConnection.postTransaction(txSigned); //or USE: searchAssets OR pollStatusAndFetchTransaction
-      } catch (err) {
-        result.isErr = true;
-        return result;
-      }
-
-      result.isErr = false;
-      result.res = assetObj;
-      return result;
-    }
-  },
-
   upload: async (data, stellarServer) => {
-    const { fromSecretKey, fromPublicKey, toPublicKey, metadata, asset, type } =
-      data;
-    console.log("🚀 ~ file: chainLogic.js:281 ~ upload: ~ data", data);
+    const {
+      fromSecretKey,
+      fromPublicKey,
+      toPublicKey,
+      metadata,
+      uploadedFile,
+      type,
+    } = data;
+
+    const file = JSON.stringify(uploadedFile);
 
     //inntialize
     let cypher;
-    let cypherAsset;
     let cypherText;
     let stellarHash;
 
     const assetKeyPair = getKeypairFromChain;
+
+    if (!metadata.assetTitle) return { message: "Asset title missing!!!" };
+
+    //Make the title UNIQUE cause uploading it to the same title could update the transaction
+    if (metadata.assetTitle.split("-")) {
+      const newTitle = metadata.assetTitle.split("-")[0];
+      metadata.assetTitle = newTitle;
+    }
+
+    metadata.assetTitle = `${metadata.assetTitle} - ${uuidv4()}`;
+
+    if (metadata.assetTitle.length > 64) {
+      return { message: "Asset name should be less than 64 characters!!!" };
+    }
+
+    if (!metadata.assetDescription)
+      return { message: "Asset description missing!!!" };
+    if (!metadata.assetPrice) return { message: "Asset price missing!!!" };
 
     const assetdata = {
       model: {
@@ -153,20 +131,12 @@ let ChainFunctions = {
     };
 
     if (type === ENCRYPTION.AES) {
-      cypher = encryptor.symmetricEncryption(asset, fromSecretKey);
+      cypher = encryptor.symmetricEncryption(file, fromSecretKey);
       assetdata.model.encrypted_model = cypher;
     } else if (type === ENCRYPTION.RSA) {
-      cypher = encryptor.asymmetricEncryption(
-        asset,
-        toPublicKey,
-        fromSecretKey
-      );
-      cypherAsset = cypher.encryptedData;
-      assetdata.model.encrypted_model = cypherAsset;
+      cypher = encryptor.asymmetricEncryption(file, toPublicKey, fromSecretKey);
+      assetdata.model.encrypted_model = cypher.encryptedData;
     } else return { message: "Please provide encryption type!!!" };
-
-    //delete privateKey and publicKey and add encryptionData
-    metadata.assetTitle = `${metadata.assetTitle} - ${uuidv4()}`;
 
     try {
       let result = await ChainFunctions.createSimpleAsset(
@@ -182,6 +152,7 @@ let ChainFunctions = {
       if (type === ENCRYPTION.AES) {
         cypherText = encryptor.symmetricEncryption(
           JSON.stringify({
+            assetTitle: metadata.assetTitle,
             assetDescription: metadata.assetDescription,
             assetID: result.res.id,
             assetKeyPair: assetKeyPair,
@@ -194,6 +165,7 @@ let ChainFunctions = {
         delete cypher.encryptedData;
         cypherText = encryptor.asymmetricEncryption(
           JSON.stringify({
+            assetTitle: metadata.assetTitle,
             assetDescription: metadata.assetDescription,
             assetID: result.res.id,
             assetKeyPair: assetKeyPair,
@@ -216,11 +188,10 @@ let ChainFunctions = {
         status: type === ENCRYPTION.AES ? STATE.OWNED : STATE.TRANSFERD,
       };
 
-      const newAsset = await new Asset({ ...assetObject }).save();
-
       if (type === ENCRYPTION.AES) {
         stellarHash = encryptor.generateHash(
           JSON.stringify({
+            assetTitle: metadata.assetTitle,
             assetDescription: metadata.assetDescription,
             assetID: result.res.id,
             assetKeyPair: assetKeyPair,
@@ -230,6 +201,7 @@ let ChainFunctions = {
       } else if (type === ENCRYPTION.RSA) {
         stellarHash = encryptor.generateHash(
           JSON.stringify({
+            assetTitle: metadata.assetTitle,
             assetDescription: metadata.assetDescription,
             assetID: result.res.id,
             assetKeyPair: assetKeyPair,
@@ -249,9 +221,9 @@ let ChainFunctions = {
 
       // Then, you can create a transaction to add data to the account
       var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-        //define the base fee
-        fee: 100,
-        networkPassphrase: NETWORKS.TESTNET,
+        timebounds: await stellarServer.fetchTimebounds(100),
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: StellarSdk.Networks.TESTNET,
       })
         .addOperation(
           StellarSdk.Operation.manageData({
@@ -267,6 +239,8 @@ let ChainFunctions = {
 
       // Finally, submit the transaction to the network
       const stellarSubmit = await stellarServer.submitTransaction(transaction);
+
+      const newAsset = await new Asset({ ...assetObject }).save();
       return {
         message: "Upload successfull",
         data: { stellar: stellarSubmit, asset: newAsset },
@@ -277,6 +251,64 @@ let ChainFunctions = {
         message:
           "Stellar or MongoDb error when creating transaction on the asset!",
       };
+    }
+  },
+
+  transferAsset: async (
+    txId,
+    keypairTo,
+    metaData,
+    keypairFrom,
+    encryptionObject,
+    fromSecretKey
+  ) => {
+    try {
+      let tx = await chainConnection.getTransaction(txId);
+
+      if (!tx) return { message: "Asset not found!!!" };
+
+      //append the encrypted data in bigchain to the encryption object
+      const encModel = tx.asset.data.model.encrypted_model;
+      encryptionObject.encryptedData = encModel;
+
+      //decrypt the asset object
+      const decryptedFile = encryptor.asymmetricDecryption(
+        encryptionObject,
+        fromSecretKey
+      );
+
+      //Reencrypt the file
+      const reEncryptFile = encryptor.symmetricEncryption(
+        decryptedFile,
+        fromSecretKey
+      );
+      tx.asset.data.model.encrypted_model = reEncryptFile;
+
+      const txTransfer = BigchainDB.Transaction.makeTransferTransaction(
+        [{ tx: tx, output_index: 0 }],
+        [
+          BigchainDB.Transaction.makeOutput(
+            BigchainDB.Transaction.makeEd25519Condition(keypairTo.publicKey)
+          ),
+        ],
+        metaData
+      );
+
+      const txTransferSigned = BigchainDB.Transaction.signTransaction(
+        txTransfer,
+        keypairFrom.privateKey
+      );
+
+      const postResponse = await chainConnection.postTransaction(
+        txTransferSigned
+      );
+      const retrieveTransaction = await chainConnection.getTransaction(
+        postResponse.id
+      );
+      return { retrieveTransaction: retrieveTransaction, tx: tx };
+    } catch (err) {
+      console.log(err);
+      throw err;
     }
   },
 };

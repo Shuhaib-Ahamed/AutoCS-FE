@@ -100,15 +100,13 @@ export default {
 
     let result = await ChainFunctions.searchAssetById(formData.assetID);
 
-    if (result.isErr) {
+    if (!result) {
       return {
         message: `"error when getting asset with id= " + ${formData.assetID}`,
       };
     }
 
-    const response = result.res;
-
-    return { message: "Fetched Asset", response };
+    return { message: "Fetched Asset", data: result };
   },
 
   searchAssetByMetadata: async (body) => {
@@ -149,21 +147,6 @@ export default {
         return { message: "User or Asset dose not exist!" };
       }
 
-      // users.forEach(async (user, index) => {
-      //   const notificationArr = user.notifications;
-      //   notificationArr.push({ ...body });
-
-      //   await User.findOneAndUpdate(
-      //     { publicKey: publicKeys[index] },
-      //     {
-      //       $set: {
-      //         notifications: notificationArr,
-      //       },
-      //     },
-      //     { new: true }
-      //   );
-      // });
-
       //save object in mongo
       const response = await new Requests({ ...body }).save();
 
@@ -192,15 +175,16 @@ export default {
     if (response.status === STATE.TRANSFERD)
       return { message: "Asset already transfered!!!" };
 
-    //decrypt assetData
+    //decrypt assetData from MongoDB
     const decryptedAssetData = encryptor.symmetricDecryption(
       response?.assetData,
       fromSecretKey
-    ); 
+    );
 
     const { assetID } = JSON.parse(decryptedAssetData);
 
-    let assetResponse = await ChainFunctions.searchAndDecryptAsset({
+    //get asset by ID
+    let decryptedAsset = await ChainFunctions.searchAndDecryptAsset({
       assetID,
       fromSecretKey,
     });
@@ -210,7 +194,7 @@ export default {
       {
         fromSecretKey: fromSecretKey,
         fromPublicKey: fromPublicKey,
-        asset: assetResponse.asset.data.model.toString(),
+        uploadedFile: decryptedAsset,
         metadata: JSON.parse(decryptedAssetData),
         toPublicKey: toPublicKey,
         type: ENCRYPTION.RSA,
@@ -237,134 +221,102 @@ export default {
 
     return {
       message: "Request Accepted!",
-      data: assetResponse,
-      uploadedAsset: uploadAsset.data,
+      data: uploadAsset.data,
     };
   },
 
   //Buyer
   transferAsset: async (data) => {
-    let { fromPublicKey, fromSecretKey, metadata, requestID } = data;
-
-    const senderKeyPair = getKeypairFromChain;
-
-    const request = await Requests.findById(requestID);
-    if (!request) return { message: "Request not found!!!" };
-
-    if (request.status === REQUEST_STATUS.INREVIEW)
-      return { message: "Asset access in review!!!" };
-
-    const response = await Asset.findOne({ _id: request?.assetObjectID });
-
-    if (!response) return { message: "Asset not found!!!" };
-
-    if (response.status === STATE.OWNED)
-      return { message: "Asset is not transfered!!!" };
-
-    //decrypt assetData
-    const decryptedAssetData = encryptor.asymmetricDecryption(
-      JSON.parse(response?.assetData),
-      fromSecretKey
-    );
+    let { fromPublicKey, fromSecretKey, metadata, requestID, toPublicKey } =
+      data;
 
     try {
+      const senderKeyPair = getKeypairFromChain;
+
+      const request = await Requests.findById(requestID);
+      if (!request) return { message: "Request not found!!!" };
+
+      if (request.status === REQUEST_STATUS.INREVIEW)
+        return { message: "Asset access in review!!!" };
+
+      const response = await Asset.findOne({ _id: request?.assetObjectID });
+
+      if (!response) return { message: "Asset not found!!!" };
+
+      if (response.status === STATE.OWNED)
+        return { message: "Asset is not transfered!!!" };
+
+      //decrypt assetData
+      const decryptedAssetData = encryptor.asymmetricDecryption(
+        JSON.parse(response?.assetData),
+        fromSecretKey
+      );
+
       const { assetID, encryptioObject, assetKeyPair } =
         JSON.parse(decryptedAssetData);
-      // Fetch the Asset by assetID or transactionId
-      let foundAsset = await ChainFunctions.searchAssetById(assetID);
-
-      if (foundAsset.res && !foundAsset.isErr) {
-        const encModel = foundAsset.res.asset.data.model.encrypted_model;
-
-        //apped the encrypted data in bigchain to the encryption object
-        encryptioObject.encryptedData = encModel;
-
-        //decrypt the asset object
-        const decryptedFile = encryptor.asymmetricDecryption(
-          encryptioObject,
-          fromSecretKey
-        );
-
-        //Reencrypt the file
-        const reEncryptFile = encryptor.symmetricEncryption(
-          decryptedFile,
-          fromSecretKey
-        );
-        foundAsset.res.asset.data.model.encrypted_model = reEncryptFile;
-      }
 
       //txId, keypairTo, metaData, keypairFrom;
       const result = await ChainFunctions.transferAsset(
-        foundAsset,
+        assetID,
         senderKeyPair,
         metadata,
-        assetKeyPair
+        assetKeyPair,
+        encryptioObject,
+        fromSecretKey
+      );
+      console.log(
+        "🚀 ~ file: chain.service.js:267 ~ transferAsset: ~ result",
+        result.tx
       );
 
-      if (result.isErr || !result) {
+      if (!result.retrieveTransaction)
         return { message: "Error when transfering asset!" };
-      }
 
       // Next, you'll need to load the account that you want to transfer data to
-      const sourceAccount = await stellarServer.loadAccount(fromPublicKey);
+      const buyerAccount = await stellarServer.loadAccount(fromPublicKey);
 
       // Then, you can create a transaction to add data to the account
-      var buyerTransaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-        //define the base fee
-        fee: 100,
-        networkPassphrase: NETWORKS.TESTNET,
+      var stellarTrnsaction = new StellarSdk.TransactionBuilder(buyerAccount, {
+        timebounds: await stellarServer.fetchTimebounds(100),
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: StellarSdk.Networks.TESTNET,
       })
         .addOperation(
           StellarSdk.Operation.manageData({
-            name: result.metadata.assetTitle,
+            name: result.tx.metadata.assetTitle,
             value: encryptor.generateHash(
               JSON.stringify({
-                assetDescription: metadata.assetDescription,
-                assetID: assetData.assetID,
-                assetKeyPair: assetData.assetKeyPair,
-                assetPrice: result.metadata.assetPrice,
+                assetTitle: result.tx.metadata.assetTitle,
+                assetDescription: result.tx.metadata.assetDescription,
+                assetID: result.tx.asset.id,
+                assetKeyPair: decryptedAssetData.assetKeyPair,
+                assetPrice: result.tx.metadata.assetPrice,
               })
             ),
           })
         )
-        .setTimeout(30)
-        .build();
-
-      // Sign the transaction with the account's secret key
-      buyerTransaction.sign(fromSecretKey);
-
-      // Next, you'll need to load the account that you want to transfer data to
-      const destinationAccount = await stellarServer.loadAccount(toPublicKey);
-
-      // Then, you can create a transaction to add data to the account
-      var sellerTransaction = new StellarSdk.TransactionBuilder(
-        destinationAccount,
-        {
-          //define the base fee
-          fee: 100,
-          networkPassphrase: NETWORKS.TESTNET,
-        }
-      )
-        .TransactionBuilder(destinationAccount)
+        .setTimeout(50)
+        .build()
         .addOperation(
           StellarSdk.Operation.payment({
             destination: toPublicKey,
             asset: StellarSdk.Asset.native(),
-            amount: result.metadata.assetPrice, // deduct the asset price from the destination account
+            amount: result.tx.metadata.assetPrice, // deduct the asset price from the destination account
           })
         )
-        .setTimeout(30)
+        .setTimeout(50)
         .build();
 
       // Sign the transaction with the account's secret key
-      sellerTransaction.sign(fromSecretKey);
+      stellarTrnsaction.sign(fromSecretKey);
 
       const encryptedAssetData = encryptor.symmetricEncryption(
         JSON.stringify({
-          assetDescription: metadata.assetDescription,
-          assetID: assetData.assetID,
-          assetKeyPair: senderKeyPair,
-          assetPrice: result.metadata.assetPrice,
+          assetTitle: result.tx.metadata.assetTitle,
+          assetDescription: result.tx.metadata.assetDescription,
+          assetID: result.tx.asset.id,
+          assetKeyPair: decryptedAssetData.assetKeyPair,
+          assetPrice: result.tx.metadata.assetPrice,
         }),
         fromSecretKey
       );
@@ -384,90 +336,22 @@ export default {
       );
 
       // Finally, submit the transaction to the network
-      const sellerSubmit = await stellarServer.submitTransaction(
-        sellerTransaction
-      );
-      // Finally, submit the transaction to the network
-      const buyerSubmit = await stellarServer.submitTransaction(
-        buyerTransaction
+      const stellarSubmit = await stellarServer.submitTransaction(
+        stellarTrnsaction
       );
 
       return {
         message: "Transfer successfull",
         data: {
-          ...buyerSubmit,
-          ...sellerSubmit,
+          stellarSubmit: stellarSubmit,
+          chainDB: result.retrieveTransaction,
         },
       };
     } catch (error) {
       console.log(error);
+      return {
+        message: "Mongo or Stellar or Bigchain Error!!!",
+      };
     }
   },
 };
-
-//   transferAsset: async (req, res) => {
-//     let { assetID, issureKeyPair, fromSecretKey, toPublicKey, metadata } = req;
-//     const senderKeyPair = getKeypairFromChain;
-
-//     //Fetch the Asset by assetID or transactionId
-//     let assetResponse = await ChainFunctions.searchAndDecryptAsset({
-//       assetID,
-//       fromSecretKey,
-//     });
-
-//     let cypher = encryptor.asymmetricEncryption(
-//       JSON.stringify(assetResponse.asset),
-//       toPublicKey,
-//       fromSecretKey
-//     );
-
-//     let cypherStringified = cypher.encryptedData;
-//     assetResponse.asset = cypherStringified;
-
-//     const { encryptedData, ...encryptionObject } = cypher;
-
-//     try {
-//       //txId, keypairTo, metaData, keypairFrom;
-//       var result = await ChainFunctions.transferAsset(
-//         assetResponse,
-//         senderKeyPair,
-//         metadata,
-//         issureKeyPair
-//       );
-
-//       if (result.isErr) {
-//         return { message: "Error when transfering asset!" };
-//       }
-
-//       //data to be encrypted before sending to the blockchain
-//       let cypher = encryptor.symmetricEncryption(assetResponse.id, toPublicKey);
-
-//       //save object in mongoDB
-//       const assetObject = {
-//         publicKey: toPublicKey,
-//         assetID: cypher.toString(),
-//         assetTitle: assetResponse.metadata.assetTitle,
-//         assetDescription: assetResponse.metadata.assetDescription,
-//         assetKeyPair: encryptor.symmetricEncryption(
-//           JSON.stringify({
-//             senderKeyPair,
-//           }),
-//           toPublicKey
-//         ),
-//         encryptionObject: encryptor.symmetricEncryption(
-//           JSON.stringify({
-//             encryptionObject,
-//           }),
-//           toPublicKey
-//         ),
-//       };
-//       await new Asset({ ...assetObject }).save();
-//     } catch (error) {
-//       console.log(error);
-//     }
-
-//     const response = { ...senderKeyPair, ...result };
-
-//     return { message: "Transfer successfull!!", response };
-//   },
-// };

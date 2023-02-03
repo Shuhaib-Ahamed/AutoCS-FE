@@ -255,7 +255,7 @@ async function searchMetadata(metadata) {
   });
 }
 
-function transferAsset(txId, keypairTo, metaData, keypairFrom, connection) {
+export function transferAsset(txId, keypairTo, metaData, keypairFrom, connection) {
   return new Promise((resolve, reject) => {
     connection
       .getTransaction(txId)
