@@ -81,15 +81,15 @@ export default {
   },
 
   searchAndDecryptAsset: async (req) => {
-    let result = await ChainFunctions.searchAndDecryptAsset(req.body);
+    let transferResult = await ChainFunctions.searchAndDecryptAsset(req.body);
 
-    if (!result) {
+    if (!transferResult) {
       return {
         message: "Asset Not Found!!",
       };
     }
 
-    const response = result;
+    const response = transferResult;
 
     return { message: "Decrypted Asset", response };
   },
@@ -98,32 +98,32 @@ export default {
     const formData = body;
     if (!formData.assetID) return;
 
-    let result = await ChainFunctions.searchAssetById(formData.assetID);
+    let transferResult = await ChainFunctions.searchAssetById(formData.assetID);
 
-    if (!result) {
+    if (!transferResult) {
       return {
         message: `"error when getting asset with id= " + ${formData.assetID}`,
       };
     }
 
-    return { message: "Fetched Asset", data: result };
+    return { message: "Fetched Asset", data: transferResult };
   },
 
   searchAssetByMetadata: async (body) => {
     const formData = body;
     if (!formData.metadataKeyword) return;
 
-    let result = await ChainFunctions.searchAssetByMetadata(
+    let transferResult = await ChainFunctions.searchAssetByMetadata(
       formData.metadataKeyword
     );
 
-    if (result.isErr) {
+    if (transferResult.isErr) {
       return {
         message: `"error when getting asset with metadata: " + ${formData.metadataKeyword}`,
       };
     }
 
-    const response = result.res;
+    const response = transferResult.res;
 
     return { message: "Fetched Asset", response };
   },
@@ -227,8 +227,14 @@ export default {
 
   //Buyer
   transferAsset: async (data) => {
-    let { fromPublicKey, fromSecretKey, metadata, requestID, toPublicKey } =
-      data;
+    let {
+      fromPublicKey,
+      fromSecretKey,
+      metadata,
+      requestID,
+      toPublicKey,
+      receiverComment,
+    } = data;
 
     try {
       const senderKeyPair = getKeypairFromChain;
@@ -256,7 +262,7 @@ export default {
         JSON.parse(decryptedAssetData);
 
       //txId, keypairTo, metaData, keypairFrom;
-      const result = await ChainFunctions.transferAsset(
+      const transferResult = await ChainFunctions.transferAsset(
         assetID,
         senderKeyPair,
         metadata,
@@ -264,70 +270,73 @@ export default {
         encryptioObject,
         fromSecretKey
       );
-      console.log(
-        "🚀 ~ file: chain.service.js:267 ~ transferAsset: ~ result",
-        result.tx
-      );
 
-      if (!result.retrieveTransaction)
+      if (!transferResult.retrieveTransaction)
         return { message: "Error when transfering asset!" };
+      if (receiverComment.length > 28)
+        return { message: "Memo should be less than 28 characters" };
 
       // Next, you'll need to load the account that you want to transfer data to
-      const buyerAccount = await stellarServer.loadAccount(fromPublicKey);
+      const sourceKeypair = StellarSdk.Keypair.fromSecret(fromSecretKey);
+      const sourceAccount = await stellarServer.loadAccount(
+        sourceKeypair.publicKey()
+      );
 
       // Then, you can create a transaction to add data to the account
-      var stellarTrnsaction = new StellarSdk.TransactionBuilder(buyerAccount, {
-        timebounds: await stellarServer.fetchTimebounds(100),
-        fee: StellarSdk.BASE_FEE,
-        networkPassphrase: StellarSdk.Networks.TESTNET,
-      })
+      const stellarTrnsaction = new StellarSdk.TransactionBuilder(
+        sourceAccount,
+        {
+          fee: StellarSdk.BASE_FEE,
+          networkPassphrase: StellarSdk.Networks.TESTNET,
+        }
+      )
         .addOperation(
           StellarSdk.Operation.manageData({
-            name: result.tx.metadata.assetTitle,
+            name: transferResult.tx.metadata.assetTitle,
             value: encryptor.generateHash(
               JSON.stringify({
-                assetTitle: result.tx.metadata.assetTitle,
-                assetDescription: result.tx.metadata.assetDescription,
-                assetID: result.tx.asset.id,
+                assetTitle: transferResult.tx.metadata.assetTitle,
+                assetDescription: transferResult.tx.metadata.assetDescription,
+                assetID: transferResult.tx.asset.id,
                 assetKeyPair: decryptedAssetData.assetKeyPair,
-                assetPrice: result.tx.metadata.assetPrice,
+                assetPrice: transferResult.tx.metadata.assetPrice,
               })
             ),
           })
         )
-        .setTimeout(50)
-        .build()
+        .setTimeout(30)
         .addOperation(
           StellarSdk.Operation.payment({
             destination: toPublicKey,
             asset: StellarSdk.Asset.native(),
-            amount: result.tx.metadata.assetPrice, // deduct the asset price from the destination account
+            amount: transferResult.tx.metadata.assetPrice, // deduct the asset price from the destination account
           })
         )
-        .setTimeout(50)
+        .addMemo(StellarSdk.Memo.text(receiverComment))
         .build();
 
       // Sign the transaction with the account's secret key
-      stellarTrnsaction.sign(fromSecretKey);
+      stellarTrnsaction.sign(sourceKeypair);
 
       const encryptedAssetData = encryptor.symmetricEncryption(
         JSON.stringify({
-          assetTitle: result.tx.metadata.assetTitle,
-          assetDescription: result.tx.metadata.assetDescription,
-          assetID: result.tx.asset.id,
+          assetTitle: transferResult.tx.metadata.assetTitle,
+          assetDescription: transferResult.tx.metadata.assetDescription,
+          assetID: transferResult.tx.asset.id,
           assetKeyPair: decryptedAssetData.assetKeyPair,
-          assetPrice: result.tx.metadata.assetPrice,
+          assetPrice: transferResult.tx.metadata.assetPrice,
         }),
         fromSecretKey
       );
 
       await Asset.findByIdAndUpdate(
-        assetObjectID,
+        request.assetObjectID,
         {
           $set: {
             publicKey: fromPublicKey,
             status: STATE.OWNED,
             assetData: encryptedAssetData,
+            encryptionType: ENCRYPTION.AES,
           },
         },
         {
@@ -343,8 +352,8 @@ export default {
       return {
         message: "Transfer successfull",
         data: {
-          stellarSubmit: stellarSubmit,
-          chainDB: result.retrieveTransaction,
+          stellar: stellarSubmit,
+          chain: transferResult.retrieveTransaction,
         },
       };
     } catch (error) {

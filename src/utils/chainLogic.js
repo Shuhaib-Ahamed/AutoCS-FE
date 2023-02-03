@@ -221,7 +221,6 @@ let ChainFunctions = {
 
       // Then, you can create a transaction to add data to the account
       var transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-        timebounds: await stellarServer.fetchTimebounds(100),
         fee: StellarSdk.BASE_FEE,
         networkPassphrase: StellarSdk.Networks.TESTNET,
       })
@@ -264,6 +263,7 @@ let ChainFunctions = {
   ) => {
     try {
       let tx = await chainConnection.getTransaction(txId);
+      console.log("🚀 ~ file: chainLogic.js:266 ~ tx", tx);
 
       if (!tx) return { message: "Asset not found!!!" };
 
