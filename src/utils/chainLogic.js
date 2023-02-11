@@ -86,7 +86,7 @@ let ChainFunctions = {
     return result;
   },
 
-  upload: async (data, stellarServer) => {
+  upload: async (data, stellarServer, start, transactions) => {
     const {
       fromSecretKey,
       fromPublicKey,
@@ -240,6 +240,17 @@ let ChainFunctions = {
       const stellarSubmit = await stellarServer.submitTransaction(transaction);
 
       const newAsset = await new Asset({ ...assetObject }).save();
+
+      const end = performance.now();
+
+      const elapsedTime = end - start;
+
+      const fileSize = uploadedFile.size;
+
+      const throughput = (fileSize * 8) / (elapsedTime / 1000) / 1024;
+      const tps = transactions / (elapsedTime / 1000);
+      console.log(`Transactions per second: ${tps.toFixed(2)}`);
+      console.log(`Throughput: ${throughput.toFixed(2)} Mbps`);
       return {
         message: "Upload successfull",
         data: { stellar: stellarSubmit, asset: newAsset },

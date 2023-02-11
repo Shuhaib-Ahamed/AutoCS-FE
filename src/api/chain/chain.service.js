@@ -25,6 +25,9 @@ export default {
     const fromSecretKey = formData["fromSecretKey"];
     const toPublicKey = formData["toPublicKey"];
 
+    const start = performance.now();
+    let transactions = 0;
+
     let metadata = {};
     for (let key of Object.keys(formData)) {
       metadata[key] = formData[key];
@@ -41,7 +44,12 @@ export default {
       type: ENCRYPTION.AES,
     };
 
-    return await ChainFunctions.upload(uploadData, stellarServer);
+    return await ChainFunctions.upload(
+      uploadData,
+      stellarServer,
+      start,
+      transactions
+    );
   },
 
   decryptAssetObject: async (body) => {

@@ -5,6 +5,7 @@ export default {
   uploadAsset: async (req, res, next) => {
     try {
       const result = await chainService.upload(req);
+
       success(res, 200, result);
     } catch (error) {
       return next(error);
@@ -29,7 +30,7 @@ export default {
       return next(error);
     }
   },
-  
+
   searchAssetById: async (req, res, next) => {
     try {
       const result = await chainService.searchAssetById(req.body);
@@ -57,7 +58,6 @@ export default {
     }
   },
 
-
   sendAssetRequest: async (req, res, next) => {
     try {
       const result = await chainService.sendAssetRequest(req.body);
@@ -75,5 +75,4 @@ export default {
       return next(error);
     }
   },
-  
 };
